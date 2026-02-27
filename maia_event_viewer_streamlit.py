@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import glob
+import os
 from dataclasses import dataclass
 from typing import Any
 
@@ -56,6 +58,15 @@ def create_lc_reader(module: Any) -> Any:
     )
 
 
+@st.cache_data(show_spinner=False)
+def resolve_input_paths(path_expr: str) -> list[str]:
+    wildcard_chars = ("*", "?", "[")
+    if any(ch in path_expr for ch in wildcard_chars):
+        return sorted(glob.glob(path_expr))
+    return [path_expr] if os.path.exists(path_expr) else []
+
+
+@st.cache_data(show_spinner=False)
 def get_event_count_and_collections(path: str) -> tuple[int, list[str]]:
     lcio = import_lcio_module()
     reader = create_lc_reader(lcio)
@@ -261,12 +272,39 @@ def main() -> None:
         "/data/fmeloni/DataMuC_MAIA_v0/v8/recoBIB/neutronGun_E_0_50/"
         "neutronGun_E_0_50_reco_0.slcio"
     )
-    path = st.sidebar.text_input("LCIO file path", value=example_path)
-    st.sidebar.markdown(f"Example: `{example_path}`")
+    example_glob = (
+        "/data/fmeloni/DataMuC_MAIA_v0/v8/recoBIB/neutronGun_E_0_50/"
+        "neutronGun_E_0_50_reco_*.slcio"
+    )
+    path_expr = st.sidebar.text_input("LCIO path or glob", value=example_glob)
+    st.sidebar.markdown(f"Example file: `{example_path}`")
+    st.sidebar.markdown(f"Example glob: `{example_glob}`")
 
-    if not path:
-        st.info("Enter a .slcio path in the sidebar.")
+    if not path_expr:
+        st.info("Enter an LCIO file path or glob pattern in the sidebar.")
         return
+
+    matched_paths = resolve_input_paths(path_expr)
+    if not matched_paths:
+        st.error("No files matched this path/pattern.")
+        return
+
+    if len(matched_paths) == 1:
+        path = matched_paths[0]
+        st.sidebar.info("Matched 1 file.")
+    else:
+        file_index = st.sidebar.number_input(
+            "Matched file index",
+            min_value=0,
+            max_value=len(matched_paths) - 1,
+            value=0,
+            step=1,
+        )
+        path = matched_paths[int(file_index)]
+        st.sidebar.info(
+            f"Matched {len(matched_paths)} files. Loading index {int(file_index)} only."
+        )
+    st.sidebar.caption(f"Selected file: {path}")
 
     try:
         n_events, default_collections = get_event_count_and_collections(path)

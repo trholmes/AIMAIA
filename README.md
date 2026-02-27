@@ -100,7 +100,10 @@ ssh -N -L 8501:127.0.0.1:8501 trholmes@ap23.uc.osg-htc.org
 ### 10. Use the app
 
 In the sidebar:
-- Set full `.slcio` path (example: `/data/fmeloni/DataMuC_MAIA_v0/v8/recoBIB/neutronGun_E_0_50/neutronGun_E_0_50_reco_0.slcio`)
+- Set LCIO file path or glob pattern:
+  - File example: `/data/fmeloni/DataMuC_MAIA_v0/v8/recoBIB/neutronGun_E_0_50/neutronGun_E_0_50_reco_0.slcio`
+  - Glob example: `/data/fmeloni/DataMuC_MAIA_v0/v8/recoBIB/neutronGun_E_0_50/neutronGun_E_0_50_reco_*.slcio`
+- If a glob matches many files, choose `Matched file index` in the sidebar. Only that file is opened/read.
 - Choose event index
 - Select collections
 - Tune energy threshold / point limits
