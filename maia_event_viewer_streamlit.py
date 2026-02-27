@@ -287,12 +287,18 @@ def default_line_collections(collection_names: list[str]) -> list[str]:
 
 def default_point_collections(collection_names: list[str]) -> list[str]:
     preferred: list[str] = []
+    secondary: list[str] = []
     for name in collection_names:
         lower = name.lower()
-        if "hit" in lower:
+        if "ecal" in lower or "hcal" in lower or "cal" in lower:
             preferred.append(name)
-    if preferred:
-        return preferred[:12]
+        elif "hit" in lower:
+            preferred.append(name)
+        elif "tracker" in lower or "vertex" in lower:
+            secondary.append(name)
+    merged = list(dict.fromkeys(preferred + secondary))
+    if merged:
+        return merged[:12]
     return collection_names[: min(8, len(collection_names))]
 
 
@@ -509,7 +515,8 @@ def build_figure(
                 if n_lines >= max_lines_per_collection:
                     break
                 lines_for_obj: list[tuple[tuple[float, float, float], tuple[float, float, float]]] = []
-                if coll_name.lower() == "pandorapfos":
+                lower_name = coll_name.lower()
+                if "pandorapfo" in lower_name or "pfo" in lower_name:
                     pfo_id = try_call(obj, "getType")
                     if pfo_allowed_pdgs is not None:
                         try:
@@ -674,15 +681,19 @@ def main() -> None:
             default=list(dict.fromkeys(forced_line_defaults + default_line_collections(event_collections))),
             help="Collections used to draw MC/track line segments.",
         )
-        if "PandoraPFOs" in line_selected:
-            pdg_options = collect_pfo_pdgids(event, "PandoraPFOs")
+        pfo_line_cols = [c for c in line_selected if ("pandorapfo" in c.lower() or "pfo" in c.lower())]
+        if pfo_line_cols:
+            pdg_union: set[int] = set()
+            for pfo_coll in pfo_line_cols:
+                pdg_union.update(collect_pfo_pdgids(event, pfo_coll))
+            pdg_options = sorted(pdg_union)
             if pdg_options:
-                default_pdgs = pdg_options[: min(8, len(pdg_options))]
+                default_pdgs = pdg_options[: min(12, len(pdg_options))]
                 selected_pdgs = st.sidebar.multiselect(
                     "Pandora PFO PDGIDs",
                     options=pdg_options,
                     default=default_pdgs,
-                    help="Only these PandoraPFO types are shown as lines.",
+                    help="Only these PFO types are shown as lines.",
                 )
                 pfo_allowed_pdgs = set(int(v) for v in selected_pdgs)
         max_lines = st.sidebar.number_input(
