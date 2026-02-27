@@ -855,6 +855,12 @@ def main() -> None:
         st.session_state.view_revision = 0
     if "apply_default_camera" not in st.session_state:
         st.session_state.apply_default_camera = True
+    if "initial_view_bootstrap_done" not in st.session_state:
+        # Force a fresh first render with the default camera orientation.
+        st.session_state.plot_reset_nonce += 1
+        st.session_state.view_revision += 1
+        st.session_state.apply_default_camera = True
+        st.session_state.initial_view_bootstrap_done = True
     if "zoom_target" not in st.session_state:
         st.session_state.zoom_target = None
     if st.sidebar.button("Reset 3D view"):
