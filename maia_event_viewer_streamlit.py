@@ -20,7 +20,7 @@ class CollectionSummary:
 
 def import_lcio_module() -> Any:
     last_exc: Exception | None = None
-    for name in ("pylcio", "pyLCIO"):
+    for name in ("pyLCIO", "pylcio"):
         try:
             return __import__(name)
         except Exception as exc:
@@ -257,8 +257,12 @@ def main() -> None:
     st.title("MAIA LCIO Browser Viewer")
     st.caption("Interactive event inspection from .slcio files using pylcio")
 
-    path = st.sidebar.text_input("LCIO file path", value="")
-    st.sidebar.markdown("Example: `/data/.../neutronGun_E_0_50_reco_0.slcio`")
+    example_path = (
+        "/data/fmeloni/DataMuC_MAIA_v0/v8/recoBIB/neutronGun_E_0_50/"
+        "neutronGun_E_0_50_reco_0.slcio"
+    )
+    path = st.sidebar.text_input("LCIO file path", value=example_path)
+    st.sidebar.markdown(f"Example: `{example_path}`")
 
     if not path:
         st.info("Enter a .slcio path in the sidebar.")

@@ -64,7 +64,7 @@ class LcioReader:
 
     def _import_lcio(self) -> Any:
         last_exc: Exception | None = None
-        for name in ("pylcio", "pyLCIO"):
+        for name in ("pyLCIO", "pylcio"):
             try:
                 module = __import__(name)
                 self._lib_name = name

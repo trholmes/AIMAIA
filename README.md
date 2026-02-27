@@ -100,7 +100,7 @@ ssh -N -L 8501:127.0.0.1:8501 trholmes@ap23.uc.osg-htc.org
 ### 10. Use the app
 
 In the sidebar:
-- Set full `.slcio` path (example: `/data/.../neutronGun_E_0_50_reco_0.slcio`)
+- Set full `.slcio` path (example: `/data/fmeloni/DataMuC_MAIA_v0/v8/recoBIB/neutronGun_E_0_50/neutronGun_E_0_50_reco_0.slcio`)
 - Choose event index
 - Select collections
 - Tune energy threshold / point limits
