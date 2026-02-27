@@ -107,6 +107,10 @@ In the sidebar:
 - Choose event index
 - Select collections
 - Tune energy threshold / point limits
+- Toggle `Show detector wireframe` to overlay MAIA detector boundaries
+
+Default view behavior:
+- The initial 3D camera is oriented so the `z` axis is horizontal (right-left).
 
 ## Quick Tunnel Test
 

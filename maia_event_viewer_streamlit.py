@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import glob
+import math
 import os
 from dataclasses import dataclass
 from typing import Any
@@ -18,6 +19,53 @@ class CollectionSummary:
     n_points: int
     n_tracks: int
     energy_sum: float
+
+
+DETECTOR_COMPONENTS = [
+    # Dimensions from provided table, converted from cm to mm.
+    {
+        "name": "Vertex",
+        "color": "#9aa0a6",
+        "barrel": {"rmin": 30.0, "rmax": 104.0, "zmax": 650.0},
+        "endcap": {"rmin": 25.0, "rmax": 112.0, "zmin": 80.0, "zmax": 282.0},
+    },
+    {
+        "name": "InnerTracker",
+        "color": "#7e57c2",
+        "barrel": {"rmin": 127.0, "rmax": 554.0, "zmax": 692.0},
+        "endcap": {"rmin": 405.0, "rmax": 555.0, "zmin": 524.0, "zmax": 2190.0},
+    },
+    {
+        "name": "OuterTracker",
+        "color": "#5c6bc0",
+        "barrel": {"rmin": 819.0, "rmax": 1486.0, "zmax": 1249.0},
+        "endcap": {"rmin": 618.0, "rmax": 1430.0, "zmin": 1310.0, "zmax": 2190.0},
+    },
+    {
+        "name": "Solenoid",
+        "color": "#26a69a",
+        "barrel": {"rmin": 1500.0, "rmax": 1857.0, "zmax": 2307.0},
+        "endcap": None,
+    },
+    {
+        "name": "ECAL",
+        "color": "#66bb6a",
+        "barrel": {"rmin": 1857.0, "rmax": 2125.0, "zmax": 2307.0},
+        "endcap": {"rmin": 310.0, "rmax": 2125.0, "zmin": 2307.0, "zmax": 2575.0},
+    },
+    {
+        "name": "HCAL",
+        "color": "#ffa726",
+        "barrel": {"rmin": 2125.0, "rmax": 4113.0, "zmax": 2575.0},
+        "endcap": {"rmin": 307.0, "rmax": 4113.0, "zmin": 2575.0, "zmax": 4562.0},
+    },
+    {
+        "name": "Muon",
+        "color": "#ef5350",
+        "barrel": {"rmin": 4150.0, "rmax": 7150.0, "zmax": 4565.0},
+        "endcap": {"rmin": 446.0, "rmax": 7150.0, "zmin": 4565.0, "zmax": 6025.0},
+    },
+]
 
 
 def import_lcio_module() -> Any:
@@ -154,6 +202,103 @@ def extract_track_line(
         return None
 
 
+def _circle_xyz(radius: float, z: float, n: int = 72) -> tuple[list[float], list[float], list[float]]:
+    xs = []
+    ys = []
+    zs = []
+    for i in range(n + 1):
+        phi = (2.0 * math.pi * i) / n
+        xs.append(radius * math.cos(phi))
+        ys.append(radius * math.sin(phi))
+        zs.append(z)
+    return xs, ys, zs
+
+
+def add_detector_wireframe(fig: go.Figure) -> None:
+    for comp in DETECTOR_COMPONENTS:
+        name = comp["name"]
+        color = comp["color"]
+        show_legend_for_component = True
+
+        barrel = comp.get("barrel")
+        if barrel:
+            for r in (barrel["rmin"], barrel["rmax"]):
+                for z in (-barrel["zmax"], barrel["zmax"]):
+                    xs, ys, zs = _circle_xyz(r, z)
+                    fig.add_trace(
+                        go.Scatter3d(
+                            x=xs,
+                            y=ys,
+                            z=zs,
+                            mode="lines",
+                            line={"color": color, "width": 2},
+                            opacity=0.35,
+                            name=name,
+                            legendgroup=name,
+                            showlegend=show_legend_for_component,
+                            hoverinfo="skip",
+                        )
+                    )
+                    show_legend_for_component = False
+
+            for phi in (0.0, math.pi / 2.0, math.pi, 3.0 * math.pi / 2.0):
+                for r in (barrel["rmin"], barrel["rmax"]):
+                    x = r * math.cos(phi)
+                    y = r * math.sin(phi)
+                    fig.add_trace(
+                        go.Scatter3d(
+                            x=[x, x],
+                            y=[y, y],
+                            z=[-barrel["zmax"], barrel["zmax"]],
+                            mode="lines",
+                            line={"color": color, "width": 1},
+                            opacity=0.25,
+                            legendgroup=name,
+                            showlegend=False,
+                            hoverinfo="skip",
+                        )
+                    )
+
+        endcap = comp.get("endcap")
+        if endcap:
+            for z in (-endcap["zmin"], -endcap["zmax"], endcap["zmin"], endcap["zmax"]):
+                for r in (endcap["rmin"], endcap["rmax"]):
+                    xs, ys, zs = _circle_xyz(r, z)
+                    fig.add_trace(
+                        go.Scatter3d(
+                            x=xs,
+                            y=ys,
+                            z=zs,
+                            mode="lines",
+                            line={"color": color, "width": 1},
+                            opacity=0.22,
+                            legendgroup=name,
+                            showlegend=False,
+                            hoverinfo="skip",
+                        )
+                    )
+
+            for z in (-endcap["zmin"], -endcap["zmax"], endcap["zmin"], endcap["zmax"]):
+                for phi in (0.0, math.pi / 2.0, math.pi, 3.0 * math.pi / 2.0):
+                    x0 = endcap["rmin"] * math.cos(phi)
+                    y0 = endcap["rmin"] * math.sin(phi)
+                    x1 = endcap["rmax"] * math.cos(phi)
+                    y1 = endcap["rmax"] * math.sin(phi)
+                    fig.add_trace(
+                        go.Scatter3d(
+                            x=[x0, x1],
+                            y=[y0, y1],
+                            z=[z, z],
+                            mode="lines",
+                            line={"color": color, "width": 1},
+                            opacity=0.2,
+                            legendgroup=name,
+                            showlegend=False,
+                            hoverinfo="skip",
+                        )
+                    )
+
+
 def build_figure(
     event: Any,
     selected_collections: list[str],
@@ -161,6 +306,7 @@ def build_figure(
     max_points_per_collection: int,
     point_size: float,
     show_tracks: bool,
+    show_detector: bool,
 ) -> tuple[go.Figure, list[CollectionSummary]]:
     fig = go.Figure()
     summaries: list[CollectionSummary] = []
@@ -249,12 +395,20 @@ def build_figure(
             )
         )
 
+    if show_detector:
+        add_detector_wireframe(fig)
+
     fig.update_layout(
         scene={
             "xaxis_title": "x [mm]",
             "yaxis_title": "y [mm]",
             "zaxis_title": "z [mm]",
             "aspectmode": "data",
+            # Initial view: z-axis runs left-right on screen.
+            "camera": {
+                "eye": {"x": 2.2, "y": 0.0, "z": 0.0},
+                "up": {"x": 0.0, "y": 1.0, "z": 0.0},
+            },
         },
         margin={"l": 0, "r": 0, "t": 30, "b": 0},
         legend={"orientation": "h", "yanchor": "bottom", "y": 1.02, "x": 0},
@@ -325,6 +479,7 @@ def main() -> None:
     max_points = st.sidebar.number_input("Max points / collection", value=10000, min_value=100, step=100)
     point_size = st.sidebar.number_input("Base point size", value=3.0, min_value=1.0, max_value=20.0, step=0.5)
     show_tracks = st.sidebar.checkbox("Show track/MC lines", value=True)
+    show_detector = st.sidebar.checkbox("Show detector wireframe", value=True)
 
     try:
         event, reader = get_event(path, event_index)
@@ -355,6 +510,7 @@ def main() -> None:
         max_points_per_collection=int(max_points),
         point_size=float(point_size),
         show_tracks=show_tracks,
+        show_detector=show_detector,
     )
 
     st.plotly_chart(fig, use_container_width=True)
