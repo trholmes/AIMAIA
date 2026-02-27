@@ -106,6 +106,7 @@ In the sidebar:
 - If a glob matches many files, choose `Matched file index` in the sidebar. Only that file is opened/read.
 - Choose event index
 - Select collections
+- If needed, set `Line collections` (for `MCParticle` / track-like collections)
 - Tune energy threshold / point limits
 - Toggle `Show detector wireframe` to overlay MAIA detector boundaries
 

@@ -187,19 +187,65 @@ def extract_energy(obj: Any) -> float:
     return 0.0
 
 
-def extract_track_line(
-    obj: Any,
-) -> tuple[tuple[float, float, float], tuple[float, float, float]] | None:
+def extract_track_lines(
+    obj: Any, track_length_mm: float
+) -> list[tuple[tuple[float, float, float], tuple[float, float, float]]]:
+    lines: list[tuple[tuple[float, float, float], tuple[float, float, float]]] = []
+
+    # MCParticle-like API.
     start = try_call(obj, "getVertex")
     end = try_call(obj, "getEndpoint")
-    if start is None or end is None:
-        return None
-    try:
-        p0 = (float(start[0]), float(start[1]), float(start[2]))
-        p1 = (float(end[0]), float(end[1]), float(end[2]))
-        return p0, p1
-    except Exception:
-        return None
+    if start is not None and end is not None:
+        try:
+            p0 = (float(start[0]), float(start[1]), float(start[2]))
+            p1 = (float(end[0]), float(end[1]), float(end[2]))
+            lines.append((p0, p1))
+        except Exception:
+            pass
+
+    # Track-like API: draw a segment from reference point in momentum direction.
+    states = try_call(obj, "getTrackStates")
+    if states:
+        for state in states:
+            ref = try_call(state, "getReferencePoint")
+            mom = try_call(state, "getMomentum")
+            if ref is None or mom is None:
+                continue
+            try:
+                x0, y0, z0 = float(ref[0]), float(ref[1]), float(ref[2])
+                px, py, pz = float(mom[0]), float(mom[1]), float(mom[2])
+                norm = math.sqrt(px * px + py * py + pz * pz)
+                if norm <= 0:
+                    continue
+                scale = track_length_mm / norm
+                x1 = x0 + px * scale
+                y1 = y0 + py * scale
+                z1 = z0 + pz * scale
+                lines.append(((x0, y0, z0), (x1, y1, z1)))
+                break
+            except Exception:
+                continue
+
+    # ReconstructedParticle-like API can carry Track objects.
+    linked_tracks = try_call(obj, "getTracks")
+    if linked_tracks:
+        for trk in linked_tracks:
+            if len(lines) >= 3:
+                break
+            lines.extend(extract_track_lines(trk, track_length_mm))
+
+    return lines
+
+
+def default_line_collections(collection_names: list[str]) -> list[str]:
+    preferred: list[str] = []
+    for name in collection_names:
+        lower = name.lower()
+        if "mcparticle" in lower or "track" in lower:
+            preferred.append(name)
+    if preferred:
+        return preferred[:8]
+    return []
 
 
 def _circle_xyz(radius: float, z: float, n: int = 72) -> tuple[list[float], list[float], list[float]]:
@@ -302,10 +348,13 @@ def add_detector_wireframe(fig: go.Figure) -> None:
 def build_figure(
     event: Any,
     selected_collections: list[str],
+    selected_line_collections: list[str],
     min_energy: float,
     max_points_per_collection: int,
     point_size: float,
     show_tracks: bool,
+    max_lines_per_collection: int,
+    track_length_mm: float,
     show_detector: bool,
     view_revision: int,
 ) -> tuple[go.Figure, list[CollectionSummary]]:
@@ -332,8 +381,6 @@ def build_figure(
 
         points: list[tuple[float, float, float]] = []
         energies: list[float] = []
-        tracks: list[tuple[tuple[float, float, float], tuple[float, float, float]]] = []
-
         for obj in coll:
             pos = extract_position(obj)
             if pos is not None:
@@ -341,11 +388,6 @@ def build_figure(
                 if energy >= min_energy:
                     points.append(pos)
                     energies.append(energy)
-
-            if show_tracks:
-                line = extract_track_line(obj)
-                if line is not None:
-                    tracks.append(line)
 
         if len(points) > max_points_per_collection:
             stride = max(1, len(points) // max_points_per_collection)
@@ -371,30 +413,55 @@ def build_figure(
                 )
             )
 
-        if show_tracks and tracks:
-            for line in tracks[:2000]:
-                (x0, y0, z0), (x1, y1, z1) = line
-                fig.add_trace(
-                    go.Scatter3d(
-                        x=[x0, x1],
-                        y=[y0, y1],
-                        z=[z0, z1],
-                        mode="lines",
-                        line={"color": color, "width": 2},
-                        opacity=0.35,
-                        showlegend=False,
-                        hoverinfo="skip",
-                    )
-                )
-
         summaries.append(
             CollectionSummary(
                 name=coll_name,
                 n_points=len(points),
-                n_tracks=len(tracks),
+                n_tracks=0,
                 energy_sum=sum(energies),
             )
         )
+
+    if show_tracks:
+        for idx, coll_name in enumerate(selected_line_collections):
+            try:
+                coll = event.getCollection(coll_name)
+            except Exception:
+                continue
+            color = palette[idx % len(palette)]
+            n_lines = 0
+            show_leg = True
+            for obj in coll:
+                if n_lines >= max_lines_per_collection:
+                    break
+                for line in extract_track_lines(obj, track_length_mm):
+                    if n_lines >= max_lines_per_collection:
+                        break
+                    (x0, y0, z0), (x1, y1, z1) = line
+                    fig.add_trace(
+                        go.Scatter3d(
+                            x=[x0, x1],
+                            y=[y0, y1],
+                            z=[z0, z1],
+                            mode="lines",
+                            line={"color": color, "width": 2},
+                            opacity=0.45,
+                            name=f"{coll_name} (lines)",
+                            legendgroup=f"{coll_name}_lines",
+                            showlegend=show_leg,
+                            hoverinfo="skip",
+                        )
+                    )
+                    show_leg = False
+                    n_lines += 1
+            summaries.append(
+                CollectionSummary(
+                    name=f"{coll_name} (lines)",
+                    n_points=0,
+                    n_tracks=n_lines,
+                    energy_sum=0.0,
+                )
+            )
 
     if show_detector:
         add_detector_wireframe(fig)
@@ -507,19 +574,47 @@ def main() -> None:
         options=event_collections,
         default=event_collections[: min(8, len(event_collections))],
     )
+    line_selected = []
+    if show_tracks:
+        line_selected = st.sidebar.multiselect(
+            "Line collections",
+            options=event_collections,
+            default=default_line_collections(event_collections),
+            help="Collections used to draw MC/track line segments.",
+        )
+        max_lines = st.sidebar.number_input(
+            "Max lines / collection",
+            min_value=100,
+            max_value=20000,
+            value=4000,
+            step=100,
+        )
+        track_length = st.sidebar.number_input(
+            "Track segment length [mm]",
+            min_value=50.0,
+            max_value=5000.0,
+            value=1200.0,
+            step=50.0,
+        )
+    else:
+        max_lines = 0
+        track_length = 1200.0
 
-    if not selected:
-        st.warning("Select at least one collection.")
+    if not selected and not (show_tracks and line_selected):
+        st.warning("Select at least one point collection or one line collection.")
         reader.close()
         return
 
     fig, summaries = build_figure(
         event=event,
         selected_collections=selected,
+        selected_line_collections=line_selected,
         min_energy=float(min_energy),
         max_points_per_collection=int(max_points),
         point_size=float(point_size),
         show_tracks=show_tracks,
+        max_lines_per_collection=int(max_lines),
+        track_length_mm=float(track_length),
         show_detector=show_detector,
         view_revision=int(st.session_state.view_revision),
     )
