@@ -32,7 +32,7 @@ class CollectionSummary:
 
 
 class LcioReader:
-    """Minimal adapter for LCIO readers (pyLCIO or pylcio)."""
+    """Minimal adapter for LCIO readers (pylcio only)."""
 
     def __init__(self, path: str):
         self.path = path
@@ -43,54 +43,14 @@ class LcioReader:
         self._load_events()
 
     def _import_lcio(self) -> Any:
-        candidates = ["pyLCIO", "pylcio"]
-        for name in candidates:
-            try:
-                module = __import__(name)
-                self._lib_name = name
-                return module
-            except Exception:
-                continue
         try:
-            import ROOT
-
-            lcio_candidates = ["liblcio.so", "liblcio.dylib"]
-            lcio_dict_candidates = ["liblcioDict.so", "liblcioDict.dylib"]
-
-            loaded_lcio = False
-            for lib in lcio_candidates:
-                rc = ROOT.gSystem.Load(lib)
-                if rc >= 0:
-                    loaded_lcio = True
-                    break
-            if not loaded_lcio:
-                raise RuntimeError(
-                    "Failed to load LCIO core library. Tried: "
-                    + ", ".join(lcio_candidates)
-                )
-
-            loaded_dict = False
-            for lib in lcio_dict_candidates:
-                rc = ROOT.gSystem.Load(lib)
-                if rc >= 0:
-                    loaded_dict = True
-                    break
-            if not loaded_dict:
-                raise RuntimeError(
-                    "Failed to load LCIO ROOT dictionary. Tried: "
-                    + ", ".join(lcio_dict_candidates)
-                )
-
-            if not hasattr(ROOT, "IOIMPL"):
-                raise RuntimeError(
-                    "ROOT imported but IOIMPL namespace not found after loading LCIO libs."
-                )
-            self._lib_name = "ROOT"
-            return ROOT
+            module = __import__("pylcio")
+            self._lib_name = "pylcio"
+            return module
         except Exception as exc:
             raise RuntimeError(
-                "Could not import LCIO Python bindings. Install/import one of: "
-                "pyLCIO, pylcio, or PyROOT with liblcio/liblcioDict."
+                "Could not import pylcio. Run this viewer inside your LCIO container "
+                "or install pylcio in the active Python environment."
             ) from exc
 
     def _create_reader(self) -> Any:
@@ -105,14 +65,7 @@ class LcioReader:
 
     def _load_events(self) -> None:
         self._reader.open(self.path)
-        if self._lib_name == "ROOT":
-            self._events = []
-            event = self._reader.readNextEvent()
-            while event:
-                self._events.append(event)
-                event = self._reader.readNextEvent()
-        else:
-            self._events = [evt for evt in self._reader]
+        self._events = [evt for evt in self._reader]
         self._reader.close()
 
     @property

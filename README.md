@@ -4,7 +4,7 @@ This repo now includes a standalone GUI event viewer for MAIA `.slcio` files:
 
 - Script: `maia_event_viewer.py`
 - Input: LCIO `.slcio`
-- Backend (auto-detected): `pyLCIO`, `pylcio`, or `PyROOT + LCIO` libs
+- Backend: `pylcio` (as provided in MuonCollider container environments)
 - GUI: `tkinter` + `matplotlib` 3D
 
 ## Run
@@ -32,6 +32,6 @@ python3 maia_event_viewer.py
 
 ## Notes
 
-- The viewer tries backends in this order: `pyLCIO` -> `pylcio` -> `PyROOT` (`liblcio.so` + `liblcioDict.so`).
-- If none are available, the GUI shows a clear load error.
+- The viewer requires `pylcio`.
+- If `pylcio` is not importable, the GUI shows a clear load error.
 - Some collections may not expose coordinates in the LCIO object API; those are skipped.
