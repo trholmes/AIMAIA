@@ -76,6 +76,10 @@ DETECTOR_Z_MAX_MM = max(
     for comp in DETECTOR_COMPONENTS
 )
 LINE_MARGIN_MM = 1000.0
+TRACKER_R_MAX_MM = 1486.0
+TRACKER_Z_MAX_MM = 2190.0
+CALO_R_MAX_MM = 4113.0
+CALO_Z_MAX_MM = 4562.0
 
 
 def import_lcio_module() -> Any:
@@ -614,6 +618,8 @@ def build_figure(
     pfo_allowed_pdgs: set[int] | None,
     show_detector: bool,
     view_revision: int,
+    apply_default_camera: bool,
+    zoom_target: str | None,
 ) -> tuple[go.Figure, list[CollectionSummary]]:
     fig = go.Figure()
     summaries: list[CollectionSummary] = []
@@ -742,20 +748,37 @@ def build_figure(
     if show_detector:
         add_detector_wireframe(fig)
 
-    fig.update_layout(
-        uirevision=f"maia-view-{view_revision}",
-        scene={
+    scene_layout: dict[str, Any] = {
             "xaxis_title": "x [mm]",
             "yaxis_title": "y [mm]",
             "zaxis_title": "z [mm]",
             "aspectmode": "data",
             "uirevision": f"maia-scene-{view_revision}",
-            # Initial view: z-axis runs left-right on screen.
-            "camera": {
-                "eye": {"x": 2.2, "y": 0.0, "z": 0.0},
-                "up": {"x": 0.0, "y": 1.0, "z": 0.0},
-            },
-        },
+        }
+
+    if zoom_target == "tracker":
+        r_lim = TRACKER_R_MAX_MM + 150.0
+        z_lim = TRACKER_Z_MAX_MM + 150.0
+        scene_layout["xaxis"] = {"range": [-r_lim, r_lim]}
+        scene_layout["yaxis"] = {"range": [-r_lim, r_lim]}
+        scene_layout["zaxis"] = {"range": [-z_lim, z_lim]}
+    elif zoom_target == "calorimeter":
+        r_lim = CALO_R_MAX_MM + 200.0
+        z_lim = CALO_Z_MAX_MM + 200.0
+        scene_layout["xaxis"] = {"range": [-r_lim, r_lim]}
+        scene_layout["yaxis"] = {"range": [-r_lim, r_lim]}
+        scene_layout["zaxis"] = {"range": [-z_lim, z_lim]}
+
+    if apply_default_camera:
+        # Initial view: z-axis runs left-right on screen.
+        scene_layout["camera"] = {
+            "eye": {"x": 2.2, "y": 0.0, "z": 0.0},
+            "up": {"x": 0.0, "y": 1.0, "z": 0.0},
+        }
+
+    fig.update_layout(
+        uirevision=f"maia-view-{view_revision}",
+        scene=scene_layout,
         margin={"l": 0, "r": 0, "t": 30, "b": 0},
         legend={"orientation": "h", "yanchor": "bottom", "y": 1.02, "x": 0},
     )
@@ -830,9 +853,25 @@ def main() -> None:
         st.session_state.plot_reset_nonce = 0
     if "view_revision" not in st.session_state:
         st.session_state.view_revision = 0
+    if "apply_default_camera" not in st.session_state:
+        st.session_state.apply_default_camera = True
+    if "zoom_target" not in st.session_state:
+        st.session_state.zoom_target = None
     if st.sidebar.button("Reset 3D view"):
         st.session_state.plot_reset_nonce += 1
         st.session_state.view_revision += 1
+        st.session_state.apply_default_camera = True
+        st.session_state.zoom_target = None
+    if st.sidebar.button("Zoom to calorimeter"):
+        st.session_state.plot_reset_nonce += 1
+        st.session_state.view_revision += 1
+        st.session_state.apply_default_camera = True
+        st.session_state.zoom_target = "calorimeter"
+    if st.sidebar.button("Zoom to tracker"):
+        st.session_state.plot_reset_nonce += 1
+        st.session_state.view_revision += 1
+        st.session_state.apply_default_camera = True
+        st.session_state.zoom_target = "tracker"
 
     try:
         event, reader = get_event(path, event_index)
@@ -933,6 +972,8 @@ def main() -> None:
         pfo_allowed_pdgs=pfo_allowed_pdgs,
         show_detector=show_detector,
         view_revision=int(st.session_state.view_revision),
+        apply_default_camera=bool(st.session_state.apply_default_camera),
+        zoom_target=st.session_state.zoom_target,
     )
 
     st.plotly_chart(
@@ -940,6 +981,7 @@ def main() -> None:
         use_container_width=True,
         key=f"maia_plot_{st.session_state.plot_reset_nonce}",
     )
+    st.session_state.apply_default_camera = False
 
     st.subheader("Collection Summary")
     st.dataframe(
