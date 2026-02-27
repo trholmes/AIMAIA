@@ -278,7 +278,11 @@ def main() -> None:
         st.warning("No events found in this file.")
         return
 
-    event_index = st.sidebar.slider("Event", min_value=0, max_value=n_events - 1, value=0)
+    if n_events == 1:
+        event_index = 0
+        st.sidebar.info("This file contains 1 event. Showing event 0.")
+    else:
+        event_index = st.sidebar.slider("Event", min_value=0, max_value=n_events - 1, value=0)
     min_energy = st.sidebar.number_input("Min energy [GeV]", value=0.0, step=0.01)
     max_points = st.sidebar.number_input("Max points / collection", value=10000, min_value=100, step=100)
     point_size = st.sidebar.number_input("Base point size", value=3.0, min_value=1.0, max_value=20.0, step=0.5)
