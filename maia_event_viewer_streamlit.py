@@ -67,6 +67,16 @@ DETECTOR_COMPONENTS = [
     },
 ]
 
+DETECTOR_R_MAX_MM = max(
+    max(comp["barrel"]["rmax"], comp["endcap"]["rmax"] if comp["endcap"] else 0.0)
+    for comp in DETECTOR_COMPONENTS
+)
+DETECTOR_Z_MAX_MM = max(
+    max(comp["barrel"]["zmax"], comp["endcap"]["zmax"] if comp["endcap"] else 0.0)
+    for comp in DETECTOR_COMPONENTS
+)
+LINE_MARGIN_MM = 1000.0
+
 
 def import_lcio_module() -> Any:
     last_exc: Exception | None = None
@@ -241,22 +251,45 @@ def extract_track_lines(
         for state in states:
             ref = try_call(state, "getReferencePoint")
             mom = try_call(state, "getMomentum")
-            if ref is None or mom is None:
-                continue
-            try:
-                x0, y0, z0 = float(ref[0]), float(ref[1]), float(ref[2])
-                px, py, pz = float(mom[0]), float(mom[1]), float(mom[2])
-                norm = math.sqrt(px * px + py * py + pz * pz)
-                if norm <= 0:
+            if ref is not None:
+                try:
+                    x0, y0, z0 = float(ref[0]), float(ref[1]), float(ref[2])
+                except Exception:
+                    x0, y0, z0 = 0.0, 0.0, 0.0
+            else:
+                x0, y0, z0 = 0.0, 0.0, 0.0
+
+            px = py = pz = None
+            if mom is not None:
+                try:
+                    px, py, pz = float(mom[0]), float(mom[1]), float(mom[2])
+                except Exception:
+                    px = py = pz = None
+
+            # Fallback for bindings without getMomentum on TrackState.
+            if px is None or py is None or pz is None:
+                phi = try_call(state, "getPhi")
+                tanl = try_call(state, "getTanLambda")
+                if phi is None:
                     continue
-                scale = track_length_mm / norm
-                x1 = x0 + px * scale
-                y1 = y0 + py * scale
-                z1 = z0 + pz * scale
-                lines.append(((x0, y0, z0), (x1, y1, z1)))
-                break
-            except Exception:
+                try:
+                    phi_v = float(phi)
+                    tanl_v = float(tanl) if tanl is not None else 0.0
+                    px = math.cos(phi_v)
+                    py = math.sin(phi_v)
+                    pz = tanl_v
+                except Exception:
+                    continue
+
+            norm = math.sqrt(px * px + py * py + pz * pz)
+            if norm <= 0:
                 continue
+            scale = track_length_mm / norm
+            x1 = x0 + px * scale
+            y1 = y0 + py * scale
+            z1 = z0 + pz * scale
+            lines.append(((x0, y0, z0), (x1, y1, z1)))
+            break
 
     # ReconstructedParticle-like API can carry Track objects.
     linked_tracks = try_call(obj, "getTracks")
@@ -271,17 +304,34 @@ def extract_track_lines(
 
 def default_line_collections(collection_names: list[str]) -> list[str]:
     preferred: list[str] = []
+    explicit_order = [
+        "PandoraPFOs",
+        "SiTracks",
+        "SiTracksRefitted",
+        "SelectedTracks",
+        "MCParticle",
+    ]
+    name_map = {normalize_name(n): n for n in collection_names}
+    for name in explicit_order:
+        key = normalize_name(name)
+        if key in name_map:
+            preferred.append(name_map[key])
+
     for name in collection_names:
-        lower = name.lower()
+        lower = normalize_name(name)
+        if "relations" in lower or "hit" in lower:
+            continue
+        if lower == "mcparticlepandorapfos":
+            continue
         if (
             "mcparticle" in lower
             or "track" in lower
-            or "pandorapfos" in lower
+            or "pandorapfo" in lower
             or "pfo" in lower
         ):
             preferred.append(name)
     if preferred:
-        return preferred[:12]
+        return list(dict.fromkeys(preferred))[:12]
     return []
 
 
@@ -303,11 +353,62 @@ def default_point_collections(collection_names: list[str]) -> list[str]:
 
 
 def is_relation_collection(name: str) -> bool:
-    return "relations" in name.lower()
+    return "relations" in normalize_name(name)
 
 
 def filtered_collections(collection_names: list[str]) -> list[str]:
     return [c for c in collection_names if not is_relation_collection(c)]
+
+
+def normalize_name(name: str) -> str:
+    return "".join(ch for ch in name.lower() if ch.isalnum())
+
+
+def collection_type_map(event: Any, collection_names: list[str]) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for name in collection_names:
+        ctype = "Unknown"
+        try:
+            coll = event.getCollection(name)
+            tn = try_call(coll, "getTypeName")
+            if tn:
+                ctype = str(tn)
+        except Exception:
+            pass
+        out[name] = ctype
+    return out
+
+
+def line_collection_options(collection_names: list[str], type_map: dict[str, str]) -> list[str]:
+    options: list[str] = []
+    for name in collection_names:
+        lower = normalize_name(name)
+        ctype = normalize_name(type_map.get(name, ""))
+        if "relations" in lower or "hit" in lower:
+            continue
+        if lower == "mcparticlepandorapfos":
+            continue
+        if (
+            "track" in lower
+            or "mcparticle" in lower
+            or "pfo" in lower
+            or "pandorapfo" in lower
+            or ctype == "track"
+            or ctype == "mcparticle"
+        ):
+            options.append(name)
+    # Ensure requested track collections appear when present.
+    for name in (
+        "SiTracks",
+        "SiTracksRefitted",
+        "SiTracksPreFit",
+        "SelectedTracks",
+        "PandoraPFOs",
+        "PandoraPFOsNoLeptons",
+    ):
+        if name in collection_names and name not in options:
+            options.append(name)
+    return options
 
 
 def collect_pfo_pdgids(event: Any, collection_name: str) -> list[int]:
@@ -337,6 +438,82 @@ def _circle_xyz(radius: float, z: float, n: int = 72) -> tuple[list[float], list
         ys.append(radius * math.sin(phi))
         zs.append(z)
     return xs, ys, zs
+
+
+def clip_line_to_detector_bounds(
+    line: tuple[tuple[float, float, float], tuple[float, float, float]]
+) -> tuple[tuple[float, float, float], tuple[float, float, float]] | None:
+    (x0, y0, z0), (x1, y1, z1) = line
+    r_limit = DETECTOR_R_MAX_MM + LINE_MARGIN_MM
+    z_limit = DETECTOR_Z_MAX_MM + LINE_MARGIN_MM
+
+    def inside(x: float, y: float, z: float) -> bool:
+        return (x * x + y * y) <= (r_limit * r_limit) and abs(z) <= z_limit
+
+    start_inside = inside(x0, y0, z0)
+    end_inside = inside(x1, y1, z1)
+    if start_inside and end_inside:
+        return line
+
+    dx = x1 - x0
+    dy = y1 - y0
+    dz = z1 - z0
+    t_candidates: list[float] = [1.0]
+
+    # z-boundary intersections
+    if dz != 0.0:
+        for z_edge in (z_limit, -z_limit):
+            t = (z_edge - z0) / dz
+            if 0.0 <= t <= 1.0:
+                t_candidates.append(t)
+
+    # cylindrical radial boundary intersections
+    a = dx * dx + dy * dy
+    if a > 0.0:
+        b = 2.0 * (x0 * dx + y0 * dy)
+        c = x0 * x0 + y0 * y0 - r_limit * r_limit
+        disc = b * b - 4.0 * a * c
+        if disc >= 0.0:
+            sqrt_disc = math.sqrt(disc)
+            t1 = (-b - sqrt_disc) / (2.0 * a)
+            t2 = (-b + sqrt_disc) / (2.0 * a)
+            if 0.0 <= t1 <= 1.0:
+                t_candidates.append(t1)
+            if 0.0 <= t2 <= 1.0:
+                t_candidates.append(t2)
+
+    # Keep only in-bounds part of the segment.
+    valid_points: list[tuple[float, tuple[float, float, float]]] = []
+    for t in sorted(set(t_candidates)):
+        xt = x0 + t * dx
+        yt = y0 + t * dy
+        zt = z0 + t * dz
+        if inside(xt, yt, zt):
+            valid_points.append((t, (xt, yt, zt)))
+
+    if start_inside:
+        if not valid_points:
+            return None
+        t_end, p_end = max(valid_points, key=lambda x: x[0])
+        if t_end <= 0.0:
+            return None
+        return (x0, y0, z0), p_end
+
+    if end_inside:
+        if not valid_points:
+            return None
+        t_start, p_start = min(valid_points, key=lambda x: x[0])
+        if t_start >= 1.0:
+            return None
+        return p_start, (x1, y1, z1)
+
+    # If both endpoints are outside, keep segment only if it crosses the allowed volume.
+    if len(valid_points) >= 2:
+        p_start = valid_points[0][1]
+        p_end = valid_points[-1][1]
+        return p_start, p_end
+
+    return None
 
 
 def add_detector_wireframe(fig: go.Figure) -> None:
@@ -515,7 +692,7 @@ def build_figure(
                 if n_lines >= max_lines_per_collection:
                     break
                 lines_for_obj: list[tuple[tuple[float, float, float], tuple[float, float, float]]] = []
-                lower_name = coll_name.lower()
+                lower_name = normalize_name(coll_name)
                 if "pandorapfo" in lower_name or "pfo" in lower_name:
                     pfo_id = try_call(obj, "getType")
                     if pfo_allowed_pdgs is not None:
@@ -533,7 +710,10 @@ def build_figure(
                 for line in lines_for_obj:
                     if n_lines >= max_lines_per_collection:
                         break
-                    (x0, y0, z0), (x1, y1, z1) = line
+                    clipped = clip_line_to_detector_bounds(line)
+                    if clipped is None:
+                        continue
+                    (x0, y0, z0), (x1, y1, z1) = clipped
                     fig.add_trace(
                         go.Scatter3d(
                             x=[x0, x1],
@@ -661,10 +841,10 @@ def main() -> None:
         return
 
     try:
-        event_collections = [str(n) for n in event.getCollectionNames()]
+        all_event_collections = [str(n) for n in event.getCollectionNames()]
     except Exception:
-        event_collections = default_collections
-    event_collections = filtered_collections(event_collections)
+        all_event_collections = default_collections
+    event_collections = filtered_collections(all_event_collections)
 
     selected = st.sidebar.multiselect(
         "Collections",
@@ -673,15 +853,30 @@ def main() -> None:
     )
     line_selected = []
     pfo_allowed_pdgs: set[int] | None = None
+    type_map = collection_type_map(event, event_collections)
     if show_tracks:
-        forced_line_defaults = [n for n in ("SiTracks", "SiTracksRefitted", "SelectedTracks") if n in event_collections]
+        line_options = line_collection_options(event_collections, type_map)
+        forced_line_defaults = [
+            n
+            for n in (
+                "PandoraPFOs",
+                "SiTracks",
+                "SiTracksRefitted",
+                "SelectedTracks",
+            )
+            if n in line_options
+        ]
         line_selected = st.sidebar.multiselect(
             "Line collections",
-            options=event_collections,
+            options=line_options,
             default=list(dict.fromkeys(forced_line_defaults + default_line_collections(event_collections))),
             help="Collections used to draw MC/track line segments.",
         )
-        pfo_line_cols = [c for c in line_selected if ("pandorapfo" in c.lower() or "pfo" in c.lower())]
+        pfo_line_cols = [
+            c
+            for c in line_selected
+            if ("pandorapfo" in normalize_name(c) or "pfo" in normalize_name(c))
+        ]
         if pfo_line_cols:
             pdg_union: set[int] = set()
             for pfo_coll in pfo_line_cols:
@@ -713,6 +908,12 @@ def main() -> None:
     else:
         max_lines = 0
         track_length = 1200.0
+
+    with st.sidebar.expander("Collection debug", expanded=False):
+        st.caption(f"All collections in event: {len(all_event_collections)}")
+        st.caption(f"Visible collections (relations removed): {len(event_collections)}")
+        lines = [f"{name} [{type_map.get(name, 'Unknown')}]" for name in all_event_collections[:200]]
+        st.code("\\n".join(lines) if lines else "(none)")
 
     if not selected and not (show_tracks and line_selected):
         st.warning("Select at least one point collection or one line collection.")
