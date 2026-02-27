@@ -52,7 +52,7 @@ class CollectionSummary:
 
 
 class LcioReader:
-    """Minimal adapter for LCIO readers (pylcio only)."""
+    """Minimal adapter for LCIO readers (pylcio/pyLCIO variants)."""
 
     def __init__(self, path: str):
         self.path = path
@@ -63,25 +63,44 @@ class LcioReader:
         self._load_events()
 
     def _import_lcio(self) -> Any:
-        try:
-            module = __import__("pylcio")
-            self._lib_name = "pylcio"
-            return module
-        except Exception as exc:
-            raise RuntimeError(
-                "Could not import pylcio. Run this viewer inside your LCIO container "
-                "or install pylcio in the active Python environment."
-            ) from exc
+        last_exc: Exception | None = None
+        for name in ("pylcio", "pyLCIO"):
+            try:
+                module = __import__(name)
+                self._lib_name = name
+                return module
+            except Exception as exc:
+                last_exc = exc
+        raise RuntimeError(
+            "Could not import LCIO Python bindings (tried pylcio, pyLCIO)."
+        ) from last_exc
 
     def _create_reader(self) -> Any:
-        # pyLCIO: IOIMPL.LCFactory.getInstance().createLCReader()
+        # Common binding layout: IOIMPL.LCFactory.getInstance().createLCReader()
         try:
             factory = self._lib.IOIMPL.LCFactory.getInstance()
             return factory.createLCReader()
-        except Exception as exc:
-            raise RuntimeError(
-                f"{self._lib_name} imported, but LCReader creation failed."
-            ) from exc
+        except Exception:
+            pass
+
+        # Some pylcio builds expose LCFactory at top level.
+        try:
+            factory = self._lib.LCFactory.getInstance()
+            return factory.createLCReader()
+        except Exception:
+            pass
+
+        ioimpl = getattr(self._lib, "IOIMPL", None)
+        if ioimpl is not None:
+            lc_factory = getattr(ioimpl, "LCFactory", None)
+            if lc_factory is not None:
+                return lc_factory.getInstance().createLCReader()
+
+        available = [k for k in dir(self._lib) if not k.startswith("_")]
+        raise RuntimeError(
+            f"{self._lib_name} imported, but LCReader creation failed. "
+            f"Top-level symbols include: {available[:20]}"
+        )
 
     def _load_events(self) -> None:
         self._reader.open(self.path)

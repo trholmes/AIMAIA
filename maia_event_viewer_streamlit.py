@@ -18,18 +18,47 @@ class CollectionSummary:
     energy_sum: float
 
 
-def import_pylcio() -> Any:
+def import_lcio_module() -> Any:
+    last_exc: Exception | None = None
+    for name in ("pylcio", "pyLCIO"):
+        try:
+            return __import__(name)
+        except Exception as exc:
+            last_exc = exc
+    raise RuntimeError(
+        "Could not import LCIO Python bindings (tried pylcio, pyLCIO)."
+    ) from last_exc
+
+
+def create_lc_reader(module: Any) -> Any:
+    # Common binding layout.
     try:
-        return __import__("pylcio")
-    except Exception as exc:
-        raise RuntimeError(
-            "Could not import pylcio. Run this in your MuonCollider container environment."
-        ) from exc
+        return module.IOIMPL.LCFactory.getInstance().createLCReader()
+    except Exception:
+        pass
+
+    # Some pylcio builds expose namespaces slightly differently.
+    try:
+        return module.LCFactory.getInstance().createLCReader()
+    except Exception:
+        pass
+
+    ioimpl = getattr(module, "IOIMPL", None)
+    if ioimpl is not None:
+        lc_factory = getattr(ioimpl, "LCFactory", None)
+        if lc_factory is not None:
+            return lc_factory.getInstance().createLCReader()
+
+    available = [k for k in dir(module) if not k.startswith("_")]
+    raise RuntimeError(
+        "Could not find LCReader factory in LCIO module. "
+        f"Available top-level symbols include: {available[:20]}"
+    )
 
 
 def get_event_count_and_collections(path: str) -> tuple[int, list[str]]:
-    pylcio = import_pylcio()
-    reader = pylcio.IOIMPL.LCFactory.getInstance().createLCReader()
+    lcio = import_lcio_module()
+    reader = create_lc_reader(lcio)
     reader.open(path)
 
     n_events = 0
@@ -47,8 +76,8 @@ def get_event_count_and_collections(path: str) -> tuple[int, list[str]]:
 
 
 def get_event(path: str, event_index: int) -> Any:
-    pylcio = import_pylcio()
-    reader = pylcio.IOIMPL.LCFactory.getInstance().createLCReader()
+    lcio = import_lcio_module()
+    reader = create_lc_reader(lcio)
     reader.open(path)
 
     current = 0
