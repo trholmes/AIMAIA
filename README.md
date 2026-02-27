@@ -105,8 +105,11 @@ In the sidebar:
   - Glob example: `/data/fmeloni/DataMuC_MAIA_v0/v8/recoBIB/neutronGun_E_0_50/neutronGun_E_0_50_reco_*.slcio`
 - If a glob matches many files, choose `Matched file index` in the sidebar. Only that file is opened/read.
 - Choose event index
-- Select collections
-- If needed, set `Line collections` (for `MCParticle` / track-like collections)
+- Select collections (collections containing `Relations` are hidden by default)
+- Hit-like collections (including tracker hits) are selected by default when available
+- If needed, set `Line collections` (for `MCParticle`, `PandoraPFOs`, and track-like collections)
+- `SiTracks`, `SiTracksRefitted`, and `SelectedTracks` are included by default in line selections when present
+- If `PandoraPFOs` is selected as a line collection, use `Pandora PFO PDGIDs` to filter which PDG IDs are drawn
 - Tune energy threshold / point limits
 - Toggle `Show detector wireframe` to overlay MAIA detector boundaries
 

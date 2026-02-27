@@ -187,6 +187,38 @@ def extract_energy(obj: Any) -> float:
     return 0.0
 
 
+def extract_pfo_line(
+    obj: Any, line_length_mm: float
+) -> tuple[tuple[float, float, float], tuple[float, float, float]] | None:
+    momentum = try_call(obj, "getMomentum")
+    if momentum is None:
+        return None
+    try:
+        px, py, pz = float(momentum[0]), float(momentum[1]), float(momentum[2])
+        norm = math.sqrt(px * px + py * py + pz * pz)
+        if norm <= 0:
+            return None
+    except Exception:
+        return None
+
+    origin = try_call(obj, "getReferencePoint")
+    if origin is None:
+        origin = try_call(obj, "getVertex")
+    if origin is None:
+        x0, y0, z0 = 0.0, 0.0, 0.0
+    else:
+        try:
+            x0, y0, z0 = float(origin[0]), float(origin[1]), float(origin[2])
+        except Exception:
+            x0, y0, z0 = 0.0, 0.0, 0.0
+
+    scale = line_length_mm / norm
+    x1 = x0 + px * scale
+    y1 = y0 + py * scale
+    z1 = z0 + pz * scale
+    return (x0, y0, z0), (x1, y1, z1)
+
+
 def extract_track_lines(
     obj: Any, track_length_mm: float
 ) -> list[tuple[tuple[float, float, float], tuple[float, float, float]]]:
@@ -241,11 +273,52 @@ def default_line_collections(collection_names: list[str]) -> list[str]:
     preferred: list[str] = []
     for name in collection_names:
         lower = name.lower()
-        if "mcparticle" in lower or "track" in lower:
+        if (
+            "mcparticle" in lower
+            or "track" in lower
+            or "pandorapfos" in lower
+            or "pfo" in lower
+        ):
             preferred.append(name)
     if preferred:
-        return preferred[:8]
+        return preferred[:12]
     return []
+
+
+def default_point_collections(collection_names: list[str]) -> list[str]:
+    preferred: list[str] = []
+    for name in collection_names:
+        lower = name.lower()
+        if "hit" in lower:
+            preferred.append(name)
+    if preferred:
+        return preferred[:12]
+    return collection_names[: min(8, len(collection_names))]
+
+
+def is_relation_collection(name: str) -> bool:
+    return "relations" in name.lower()
+
+
+def filtered_collections(collection_names: list[str]) -> list[str]:
+    return [c for c in collection_names if not is_relation_collection(c)]
+
+
+def collect_pfo_pdgids(event: Any, collection_name: str) -> list[int]:
+    pdgs: set[int] = set()
+    try:
+        coll = event.getCollection(collection_name)
+    except Exception:
+        return []
+    for obj in coll:
+        val = try_call(obj, "getType")
+        if val is None:
+            continue
+        try:
+            pdgs.add(int(val))
+        except Exception:
+            continue
+    return sorted(pdgs)
 
 
 def _circle_xyz(radius: float, z: float, n: int = 72) -> tuple[list[float], list[float], list[float]]:
@@ -355,6 +428,7 @@ def build_figure(
     show_tracks: bool,
     max_lines_per_collection: int,
     track_length_mm: float,
+    pfo_allowed_pdgs: set[int] | None,
     show_detector: bool,
     view_revision: int,
 ) -> tuple[go.Figure, list[CollectionSummary]]:
@@ -434,7 +508,22 @@ def build_figure(
             for obj in coll:
                 if n_lines >= max_lines_per_collection:
                     break
-                for line in extract_track_lines(obj, track_length_mm):
+                lines_for_obj: list[tuple[tuple[float, float, float], tuple[float, float, float]]] = []
+                if coll_name.lower() == "pandorapfos":
+                    pfo_id = try_call(obj, "getType")
+                    if pfo_allowed_pdgs is not None:
+                        try:
+                            if int(pfo_id) not in pfo_allowed_pdgs:
+                                continue
+                        except Exception:
+                            continue
+                    pfo_line = extract_pfo_line(obj, track_length_mm)
+                    if pfo_line is not None:
+                        lines_for_obj = [pfo_line]
+                else:
+                    lines_for_obj = extract_track_lines(obj, track_length_mm)
+
+                for line in lines_for_obj:
                     if n_lines >= max_lines_per_collection:
                         break
                     (x0, y0, z0), (x1, y1, z1) = line
@@ -568,20 +657,34 @@ def main() -> None:
         event_collections = [str(n) for n in event.getCollectionNames()]
     except Exception:
         event_collections = default_collections
+    event_collections = filtered_collections(event_collections)
 
     selected = st.sidebar.multiselect(
         "Collections",
         options=event_collections,
-        default=event_collections[: min(8, len(event_collections))],
+        default=default_point_collections(event_collections),
     )
     line_selected = []
+    pfo_allowed_pdgs: set[int] | None = None
     if show_tracks:
+        forced_line_defaults = [n for n in ("SiTracks", "SiTracksRefitted", "SelectedTracks") if n in event_collections]
         line_selected = st.sidebar.multiselect(
             "Line collections",
             options=event_collections,
-            default=default_line_collections(event_collections),
+            default=list(dict.fromkeys(forced_line_defaults + default_line_collections(event_collections))),
             help="Collections used to draw MC/track line segments.",
         )
+        if "PandoraPFOs" in line_selected:
+            pdg_options = collect_pfo_pdgids(event, "PandoraPFOs")
+            if pdg_options:
+                default_pdgs = pdg_options[: min(8, len(pdg_options))]
+                selected_pdgs = st.sidebar.multiselect(
+                    "Pandora PFO PDGIDs",
+                    options=pdg_options,
+                    default=default_pdgs,
+                    help="Only these PandoraPFO types are shown as lines.",
+                )
+                pfo_allowed_pdgs = set(int(v) for v in selected_pdgs)
         max_lines = st.sidebar.number_input(
             "Max lines / collection",
             min_value=100,
@@ -615,6 +718,7 @@ def main() -> None:
         show_tracks=show_tracks,
         max_lines_per_collection=int(max_lines),
         track_length_mm=float(track_length),
+        pfo_allowed_pdgs=pfo_allowed_pdgs,
         show_detector=show_detector,
         view_revision=int(st.session_state.view_revision),
     )
