@@ -6,10 +6,26 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-import tkinter as tk
 from dataclasses import dataclass
-from tkinter import filedialog, messagebox, ttk
 from typing import Any
+
+TK_AVAILABLE = True
+TK_IMPORT_ERROR: Exception | None = None
+try:
+    import tkinter as tk
+    from tkinter import filedialog, messagebox, ttk
+except Exception as exc:
+    TK_AVAILABLE = False
+    TK_IMPORT_ERROR = exc
+
+    class _TkStub:
+        class Tk:
+            pass
+
+    tk = _TkStub()  # type: ignore[assignment]
+    filedialog = None  # type: ignore[assignment]
+    messagebox = None  # type: ignore[assignment]
+    ttk = None  # type: ignore[assignment]
 
 # Keep matplotlib state writable inside restricted environments.
 if not os.path.isdir(os.environ.get("MPLCONFIGDIR", "")) or not os.access(
@@ -18,9 +34,13 @@ if not os.path.isdir(os.environ.get("MPLCONFIGDIR", "")) or not os.access(
     os.environ["MPLCONFIGDIR"] = "/tmp"
 
 import matplotlib
-matplotlib.use("TkAgg")
+if TK_AVAILABLE:
+    matplotlib.use("TkAgg")
+else:
+    matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+if TK_AVAILABLE:
+    from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 
 @dataclass
@@ -441,11 +461,53 @@ class MaiaEventViewer(tk.Tk):
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="MAIA LCIO 3D event viewer")
     parser.add_argument("slcio", nargs="?", help="Path to input .slcio file")
+    parser.add_argument(
+        "--summary-event",
+        type=int,
+        default=None,
+        help="Headless mode: print collection summary for one event index.",
+    )
     return parser.parse_args(argv)
+
+
+def print_event_summary(path: str, event_index: int) -> int:
+    reader = LcioReader(path)
+    if reader.n_events == 0:
+        print("No events found in file.")
+        return 1
+    idx = max(0, min(event_index, reader.n_events - 1))
+    event = reader.get_event(idx)
+    names = reader.get_collection_names(idx)
+    print(f"File: {path}")
+    print(f"Events: {reader.n_events}")
+    print(f"Event: {idx}")
+    for name in names:
+        try:
+            coll = event.getCollection(name)
+            n = sum(1 for _ in coll)
+        except Exception:
+            n = -1
+        print(f"- {name}: {n if n >= 0 else 'N/A'}")
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv or sys.argv[1:])
+    if args.summary_event is not None:
+        if not args.slcio:
+            print("Provide a .slcio path when using --summary-event.")
+            return 2
+        return print_event_summary(args.slcio, args.summary_event)
+
+    if not TK_AVAILABLE:
+        print("Tkinter is not available in this Python environment.")
+        print(
+            "Run with --summary-event for headless inspection, or use a Python build with tkinter for the GUI."
+        )
+        if TK_IMPORT_ERROR:
+            print(f"Import error: {TK_IMPORT_ERROR}")
+        return 2
+
     app = MaiaEventViewer(initial_file=args.slcio)
     app.mainloop()
     return 0
