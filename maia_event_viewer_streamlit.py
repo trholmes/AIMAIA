@@ -307,6 +307,7 @@ def build_figure(
     point_size: float,
     show_tracks: bool,
     show_detector: bool,
+    view_revision: int,
 ) -> tuple[go.Figure, list[CollectionSummary]]:
     fig = go.Figure()
     summaries: list[CollectionSummary] = []
@@ -399,11 +400,13 @@ def build_figure(
         add_detector_wireframe(fig)
 
     fig.update_layout(
+        uirevision=f"maia-view-{view_revision}",
         scene={
             "xaxis_title": "x [mm]",
             "yaxis_title": "y [mm]",
             "zaxis_title": "z [mm]",
             "aspectmode": "data",
+            "uirevision": f"maia-scene-{view_revision}",
             # Initial view: z-axis runs left-right on screen.
             "camera": {
                 "eye": {"x": 2.2, "y": 0.0, "z": 0.0},
@@ -480,6 +483,13 @@ def main() -> None:
     point_size = st.sidebar.number_input("Base point size", value=3.0, min_value=1.0, max_value=20.0, step=0.5)
     show_tracks = st.sidebar.checkbox("Show track/MC lines", value=True)
     show_detector = st.sidebar.checkbox("Show detector wireframe", value=True)
+    if "plot_reset_nonce" not in st.session_state:
+        st.session_state.plot_reset_nonce = 0
+    if "view_revision" not in st.session_state:
+        st.session_state.view_revision = 0
+    if st.sidebar.button("Reset 3D view"):
+        st.session_state.plot_reset_nonce += 1
+        st.session_state.view_revision += 1
 
     try:
         event, reader = get_event(path, event_index)
@@ -511,9 +521,14 @@ def main() -> None:
         point_size=float(point_size),
         show_tracks=show_tracks,
         show_detector=show_detector,
+        view_revision=int(st.session_state.view_revision),
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(
+        fig,
+        use_container_width=True,
+        key=f"maia_plot_{st.session_state.plot_reset_nonce}",
+    )
 
     st.subheader("Collection Summary")
     st.dataframe(
