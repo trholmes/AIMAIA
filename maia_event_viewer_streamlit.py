@@ -926,20 +926,19 @@ def main() -> None:
     type_map = collection_type_map(event, event_collections)
     if show_tracks:
         line_options = line_collection_options(event_collections, type_map)
-        forced_line_defaults = [
+        startup_line_defaults = [
             n
             for n in (
                 "PandoraPFOs",
-                "SiTracks",
-                "SiTracksRefitted",
                 "SelectedTracks",
+                "MCParticle",
             )
             if n in line_options
         ]
         line_selected = st.sidebar.multiselect(
             "Line collections",
             options=line_options,
-            default=list(dict.fromkeys(forced_line_defaults + default_line_collections(event_collections))),
+            default=startup_line_defaults,
             help="Collections used to draw MC/track line segments.",
         )
         pfo_line_cols = [
@@ -1009,7 +1008,7 @@ def main() -> None:
 
     st.plotly_chart(
         fig,
-        use_container_width=True,
+        width="stretch",
         key=f"maia_plot_{st.session_state.plot_reset_nonce}",
     )
     st.session_state.force_default_camera = False
@@ -1025,7 +1024,7 @@ def main() -> None:
             }
             for s in summaries
         ],
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
     )
 
