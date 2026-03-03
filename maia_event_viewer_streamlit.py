@@ -12,8 +12,6 @@ from typing import Any
 import plotly.graph_objects as go
 import streamlit as st
 
-from plotly_camera_component import plotly_camera_chart
-
 
 @dataclass
 class CollectionSummary:
@@ -810,13 +808,12 @@ def build_figure(
         scene_layout["yaxis"] = {"range": [-r_lim, r_lim]}
         scene_layout["zaxis"] = {"range": [-z_lim, z_lim]}
 
-    if force_default_camera:
-        # Apply default orientation only when explicitly requested so normal
-        # interactions (e.g. changing selected collections) keep the current view.
-        scene_layout["camera"] = {
-            "eye": {"x": 2.2, "y": 0.0, "z": 0.0},
-            "up": {"x": 0.0, "y": 1.0, "z": 0.0},
-        }
+    # Ensure any reset/remount returns to the intended orientation:
+    # z-axis appears left-right on screen.
+    scene_layout["camera"] = {
+        "eye": {"x": 2.2, "y": 0.0, "z": 0.0},
+        "up": {"x": 0.0, "y": 1.0, "z": 0.0},
+    }
 
     fig.update_layout(
         uirevision="maia-view",
@@ -915,8 +912,6 @@ def main() -> None:
         st.session_state.plot_reset_nonce = 0
     if "view_revision" not in st.session_state:
         st.session_state.view_revision = 0
-    if "camera_state" not in st.session_state:
-        st.session_state.camera_state = None
     if "force_default_camera" not in st.session_state:
         st.session_state.force_default_camera = True
     if "initial_view_bootstrap_done" not in st.session_state:
@@ -932,19 +927,16 @@ def main() -> None:
         st.session_state.view_revision += 1
         st.session_state.force_default_camera = True
         st.session_state.pending_zoom_target = None
-        st.session_state.camera_state = None
     if st.sidebar.button("Zoom to calorimeter"):
         st.session_state.plot_reset_nonce += 1
         st.session_state.view_revision += 1
         st.session_state.force_default_camera = True
         st.session_state.pending_zoom_target = "calorimeter"
-        st.session_state.camera_state = None
     if st.sidebar.button("Zoom to tracker"):
         st.session_state.plot_reset_nonce += 1
         st.session_state.view_revision += 1
         st.session_state.force_default_camera = True
         st.session_state.pending_zoom_target = "tracker"
-        st.session_state.camera_state = None
 
     try:
         event, reader = get_event(path, event_index)
@@ -1033,14 +1025,10 @@ def main() -> None:
         zoom_target=st.session_state.pending_zoom_target,
     )
 
-    initial_camera = (
-        None if st.session_state.force_default_camera else st.session_state.camera_state
-    )
-    st.session_state.camera_state = plotly_camera_chart(
+    st.plotly_chart(
         fig,
+        width="stretch",
         key=f"maia_plot_{st.session_state.plot_reset_nonce}",
-        height=740,
-        camera=initial_camera,
     )
     st.session_state.force_default_camera = False
     st.session_state.pending_zoom_target = None
