@@ -80,6 +80,32 @@ TRACKER_R_MAX_MM = 1486.0
 TRACKER_Z_MAX_MM = 2190.0
 CALO_R_MAX_MM = 4113.0
 CALO_Z_MAX_MM = 4562.0
+HIT_MARKER_OPACITY = 1.0
+HIT_MARKER_MAX_ENERGY_BOOST = 2.5
+HIT_COLOR_PALETTE = [
+    "#005f73",
+    "#0a9396",
+    "#1d3557",
+    "#9b2226",
+    "#3a5a40",
+    "#5f0f40",
+    "#264653",
+    "#bb3e03",
+    "#006d77",
+    "#6a4c93",
+]
+LINE_COLOR_PALETTE = [
+    "#1f77b4",
+    "#ff7f0e",
+    "#2ca02c",
+    "#d62728",
+    "#9467bd",
+    "#8c564b",
+    "#e377c2",
+    "#7f7f7f",
+    "#bcbd22",
+    "#17becf",
+]
 
 
 def import_lcio_module() -> Any:
@@ -622,18 +648,6 @@ def build_figure(
 ) -> tuple[go.Figure, list[CollectionSummary]]:
     fig = go.Figure()
     summaries: list[CollectionSummary] = []
-    palette = [
-        "#1f77b4",
-        "#ff7f0e",
-        "#2ca02c",
-        "#d62728",
-        "#9467bd",
-        "#8c564b",
-        "#e377c2",
-        "#7f7f7f",
-        "#bcbd22",
-        "#17becf",
-    ]
 
     for idx, coll_name in enumerate(selected_collections):
         try:
@@ -656,13 +670,18 @@ def build_figure(
             points = points[::stride]
             energies = energies[::stride]
 
-        color = palette[idx % len(palette)]
+        color = HIT_COLOR_PALETTE[idx % len(HIT_COLOR_PALETTE)]
 
         if points:
             xs = [p[0] for p in points]
             ys = [p[1] for p in points]
             zs = [p[2] for p in points]
-            sizes = [point_size + min(8.0, e * 2.0) for e in energies]
+            # Softer energy scaling avoids oversized dense clusters that visually wash out.
+            sizes = [
+                point_size
+                + min(HIT_MARKER_MAX_ENERGY_BOOST, math.sqrt(max(0.0, e)) * 1.1)
+                for e in energies
+            ]
 
             fig.add_trace(
                 go.Scatter3d(
@@ -670,7 +689,12 @@ def build_figure(
                     y=ys,
                     z=zs,
                     mode="markers",
-                    marker={"size": sizes, "color": color, "opacity": 0.75},
+                    marker={
+                        "size": sizes,
+                        "color": color,
+                        "opacity": HIT_MARKER_OPACITY,
+                        "line": {"width": 0},
+                    },
                     name=coll_name,
                 )
             )
@@ -690,7 +714,7 @@ def build_figure(
                 coll = event.getCollection(coll_name)
             except Exception:
                 continue
-            color = palette[idx % len(palette)]
+            color = LINE_COLOR_PALETTE[idx % len(LINE_COLOR_PALETTE)]
             n_lines = 0
             show_leg = True
             for obj in coll:
