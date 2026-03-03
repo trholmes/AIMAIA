@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <style>
+      html,
+      body,
+      #plot {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+      }
+    </style>
+    <script src="https://unpkg.com/streamlit-component-lib@2.0.0/dist/index.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  </head>
+  <body>
+    <div id="plot"></div>
+    <script>
+      const plotEl = document.getElementById("plot");
+
+      function extractCamera(relayoutData) {
+        if (!relayoutData || typeof relayoutData !== "object") {
+          return null;
+        }
+        if (relayoutData["scene.camera"]) {
+          return relayoutData["scene.camera"];
+        }
+
+        const camera = { eye: {}, up: {}, center: {} };
+        let seen = false;
+        for (const group of ["eye", "up", "center"]) {
+          for (const axis of ["x", "y", "z"]) {
+            const key = `scene.camera.${group}.${axis}`;
+            if (Object.prototype.hasOwnProperty.call(relayoutData, key)) {
+              camera[group][axis] = relayoutData[key];
+              seen = true;
+            }
+          }
+        }
+        return seen ? camera : null;
+      }
+
+      function render(event) {
+        const args = (event && event.detail && event.detail.args) || {};
+        const fig = args.fig || {};
+        const data = fig.data || [];
+        const layout = { ...(fig.layout || {}) };
+        const config = {
+          responsive: true,
+          displaylogo: false,
+          ...(fig.config || {}),
+        };
+        const height = Number(args.height || 700);
+
+        if (args.camera) {
+          layout.scene = { ...(layout.scene || {}), camera: args.camera };
+        }
+
+        plotEl.style.height = `${height}px`;
+
+        Plotly.react(plotEl, data, layout, config).then(() => {
+          if (plotEl.__cameraHandler && typeof plotEl.removeListener === "function") {
+            plotEl.removeListener("plotly_relayout", plotEl.__cameraHandler);
+          }
+
+          plotEl.__cameraHandler = (relayoutData) => {
+            const camera = extractCamera(relayoutData);
+            if (camera) {
+              Streamlit.setComponentValue(camera);
+            }
+          };
+          plotEl.on("plotly_relayout", plotEl.__cameraHandler);
+          Streamlit.setFrameHeight(height + 8);
+        });
+      }
+
+      Streamlit.events.addEventListener(Streamlit.RENDER_EVENT, render);
+      Streamlit.setComponentReady();
+      Streamlit.setFrameHeight(708);
+    </script>
+  </body>
+</html>

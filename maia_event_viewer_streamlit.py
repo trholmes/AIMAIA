@@ -12,6 +12,8 @@ from typing import Any
 import plotly.graph_objects as go
 import streamlit as st
 
+from plotly_camera_component import plotly_camera_chart
+
 
 @dataclass
 class CollectionSummary:
@@ -889,10 +891,6 @@ def main() -> None:
     point_size = st.sidebar.number_input("Base point size", value=3.0, min_value=1.0, max_value=20.0, step=0.5)
     show_tracks = st.sidebar.checkbox("Show track/MC lines", value=True)
     if show_tracks:
-        if "min_line_energy_applied" not in st.session_state:
-            st.session_state.min_line_energy_applied = 0.0
-        if "min_line_energy_input" not in st.session_state:
-            st.session_state.min_line_energy_input = float(st.session_state.min_line_energy_applied)
         max_lines = st.sidebar.number_input(
             "Max lines / collection",
             min_value=100,
@@ -900,16 +898,7 @@ def main() -> None:
             value=4000,
             step=100,
         )
-        st.sidebar.number_input(
-            "Min line energy [GeV]",
-            min_value=0.0,
-            step=0.01,
-            key="min_line_energy_input",
-        )
-        if st.sidebar.button("Apply min line energy"):
-            st.session_state.min_line_energy_applied = float(st.session_state.min_line_energy_input)
-        min_line_energy = float(st.session_state.min_line_energy_applied)
-        st.sidebar.caption(f"Applied min line energy: {min_line_energy:.2f} GeV")
+        min_line_energy = st.sidebar.number_input("Min line energy [GeV]", value=0.0, step=0.01)
         track_length = st.sidebar.number_input(
             "Track segment length [mm]",
             min_value=50.0,
@@ -926,6 +915,8 @@ def main() -> None:
         st.session_state.plot_reset_nonce = 0
     if "view_revision" not in st.session_state:
         st.session_state.view_revision = 0
+    if "camera_state" not in st.session_state:
+        st.session_state.camera_state = None
     if "force_default_camera" not in st.session_state:
         st.session_state.force_default_camera = True
     if "initial_view_bootstrap_done" not in st.session_state:
@@ -941,16 +932,19 @@ def main() -> None:
         st.session_state.view_revision += 1
         st.session_state.force_default_camera = True
         st.session_state.pending_zoom_target = None
+        st.session_state.camera_state = None
     if st.sidebar.button("Zoom to calorimeter"):
         st.session_state.plot_reset_nonce += 1
         st.session_state.view_revision += 1
         st.session_state.force_default_camera = True
         st.session_state.pending_zoom_target = "calorimeter"
+        st.session_state.camera_state = None
     if st.sidebar.button("Zoom to tracker"):
         st.session_state.plot_reset_nonce += 1
         st.session_state.view_revision += 1
         st.session_state.force_default_camera = True
         st.session_state.pending_zoom_target = "tracker"
+        st.session_state.camera_state = None
 
     try:
         event, reader = get_event(path, event_index)
@@ -1039,10 +1033,14 @@ def main() -> None:
         zoom_target=st.session_state.pending_zoom_target,
     )
 
-    st.plotly_chart(
+    initial_camera = (
+        None if st.session_state.force_default_camera else st.session_state.camera_state
+    )
+    st.session_state.camera_state = plotly_camera_chart(
         fig,
-        width="stretch",
         key=f"maia_plot_{st.session_state.plot_reset_nonce}",
+        height=740,
+        camera=initial_camera,
     )
     st.session_state.force_default_camera = False
     st.session_state.pending_zoom_target = None
