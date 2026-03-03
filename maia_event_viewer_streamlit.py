@@ -215,7 +215,7 @@ def extract_position(obj: Any) -> tuple[float, float, float] | None:
     return None
 
 
-def extract_energy(obj: Any) -> float:
+def extract_energy_optional(obj: Any) -> float | None:
     for method_name in ("getEnergy", "getEDep", "getAmplitude"):
         value = try_call(obj, method_name)
         if value is None:
@@ -224,6 +224,13 @@ def extract_energy(obj: Any) -> float:
             return float(value)
         except Exception:
             continue
+    return None
+
+
+def extract_energy(obj: Any) -> float:
+    energy = extract_energy_optional(obj)
+    if energy is not None:
+        return energy
     return 0.0
 
 
@@ -635,7 +642,8 @@ def build_figure(
     event: Any,
     selected_collections: list[str],
     selected_line_collections: list[str],
-    min_energy: float,
+    min_hit_energy: float,
+    min_line_energy: float,
     max_points_per_collection: int,
     point_size: float,
     show_tracks: bool,
@@ -662,7 +670,7 @@ def build_figure(
             pos = extract_position(obj)
             if pos is not None:
                 energy = extract_energy(obj)
-                if energy >= min_energy:
+                if energy >= min_hit_energy:
                     points.append(pos)
                     energies.append(energy)
 
@@ -717,10 +725,14 @@ def build_figure(
                 continue
             color = LINE_COLOR_PALETTE[idx % len(LINE_COLOR_PALETTE)]
             n_lines = 0
+            energy_sum = 0.0
             show_leg = True
             for obj in coll:
                 if n_lines >= max_lines_per_collection:
                     break
+                obj_energy = extract_energy_optional(obj)
+                if obj_energy is not None and obj_energy < min_line_energy:
+                    continue
                 lines_for_obj: list[tuple[tuple[float, float, float], tuple[float, float, float]]] = []
                 lower_name = normalize_name(coll_name)
                 if "pandorapfo" in lower_name or "pfo" in lower_name:
@@ -760,12 +772,14 @@ def build_figure(
                     )
                     show_leg = False
                     n_lines += 1
+                    if obj_energy is not None:
+                        energy_sum += obj_energy
             summaries.append(
                 CollectionSummary(
                     name=f"{coll_name} (lines)",
                     n_points=0,
                     n_tracks=n_lines,
-                    energy_sum=0.0,
+                    energy_sum=energy_sum,
                 )
             )
 
@@ -869,7 +883,7 @@ def main() -> None:
         st.sidebar.info("This file contains 1 event. Showing event 0.")
     else:
         event_index = st.sidebar.slider("Event", min_value=0, max_value=n_events - 1, value=0)
-    min_energy = st.sidebar.number_input("Min energy [GeV]", value=0.0, step=0.01)
+    min_hit_energy = st.sidebar.number_input("Min hit energy [GeV]", value=0.0, step=0.01)
     max_points = st.sidebar.number_input("Max points / collection", value=10000, min_value=100, step=100)
     point_size = st.sidebar.number_input("Base point size", value=3.0, min_value=1.0, max_value=20.0, step=0.5)
     show_tracks = st.sidebar.checkbox("Show track/MC lines", value=True)
@@ -967,6 +981,7 @@ def main() -> None:
             value=4000,
             step=100,
         )
+        min_line_energy = st.sidebar.number_input("Min line energy [GeV]", value=0.0, step=0.01)
         track_length = st.sidebar.number_input(
             "Track segment length [mm]",
             min_value=50.0,
@@ -976,6 +991,7 @@ def main() -> None:
         )
     else:
         max_lines = 0
+        min_line_energy = 0.0
         track_length = 1200.0
 
     with st.sidebar.expander("Collection debug", expanded=False):
@@ -993,7 +1009,8 @@ def main() -> None:
         event=event,
         selected_collections=selected,
         selected_line_collections=line_selected,
-        min_energy=float(min_energy),
+        min_hit_energy=float(min_hit_energy),
+        min_line_energy=float(min_line_energy),
         max_points_per_collection=int(max_points),
         point_size=float(point_size),
         show_tracks=show_tracks,
