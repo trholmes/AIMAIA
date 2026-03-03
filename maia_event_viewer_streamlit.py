@@ -578,6 +578,7 @@ def add_detector_wireframe(fig: go.Figure) -> None:
                             legendgrouptitle_text=(
                                 "Detector wireframe" if not wireframe_group_title_shown else None
                             ),
+                            legend="legend2",
                             showlegend=show_legend_for_component,
                             hoverinfo="skip",
                         )
@@ -811,6 +812,9 @@ def build_figure(
             "aspectmode": "data",
             # Keep uirevision stable so normal widget changes preserve user view.
             "uirevision": "maia-scene",
+            # Reserve a right column for stacked legends while preserving full
+            # vertical space for the detector visualization.
+            "domain": {"x": [0.0, 0.78], "y": [0.0, 1.0]},
         }
 
     if zoom_target == "tracker":
@@ -838,12 +842,26 @@ def build_figure(
         scene=scene_layout,
         margin={"l": 0, "r": 0, "t": 30, "b": 0},
         legend={
-            "orientation": "h",
-            "yanchor": "bottom",
-            "y": 1.02,
-            "x": 0,
-            "tracegroupgap": 16,
+            "orientation": "v",
+            "x": 0.80,
+            "xanchor": "left",
+            "y": 1.00,
+            "yanchor": "top",
             "groupclick": "toggleitem",
+            "bgcolor": "rgba(255,255,255,0.85)",
+            "bordercolor": "rgba(0,0,0,0.15)",
+            "borderwidth": 1,
+        },
+        legend2={
+            "orientation": "v",
+            "x": 0.80,
+            "xanchor": "left",
+            "y": 0.48,
+            "yanchor": "top",
+            "groupclick": "toggleitem",
+            "bgcolor": "rgba(255,255,255,0.85)",
+            "bordercolor": "rgba(0,0,0,0.15)",
+            "borderwidth": 1,
         },
     )
 
