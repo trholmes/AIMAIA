@@ -848,9 +848,6 @@ def build_figure(
             "y": 1.00,
             "yanchor": "top",
             "groupclick": "toggleitem",
-            "bgcolor": "rgba(255,255,255,0.85)",
-            "bordercolor": "rgba(0,0,0,0.15)",
-            "borderwidth": 1,
         },
         legend2={
             "orientation": "v",
@@ -859,9 +856,6 @@ def build_figure(
             "y": 0.48,
             "yanchor": "top",
             "groupclick": "toggleitem",
-            "bgcolor": "rgba(255,255,255,0.85)",
-            "bordercolor": "rgba(0,0,0,0.15)",
-            "borderwidth": 1,
         },
     )
 
