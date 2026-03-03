@@ -786,12 +786,19 @@ def build_figure(
     if show_detector:
         add_detector_wireframe(fig)
 
+    base_r_lim = DETECTOR_R_MAX_MM + LINE_MARGIN_MM
+    base_z_lim = DETECTOR_Z_MAX_MM + LINE_MARGIN_MM
     scene_layout: dict[str, Any] = {
             "xaxis_title": "x [mm]",
             "yaxis_title": "y [mm]",
             "zaxis_title": "z [mm]",
             "aspectmode": "data",
             "uirevision": f"maia-scene-{view_revision}",
+            # Keep a stable default framing so collection/threshold changes do
+            # not trigger autoscale jumps that feel like camera resets.
+            "xaxis": {"range": [-base_r_lim, base_r_lim], "autorange": False},
+            "yaxis": {"range": [-base_r_lim, base_r_lim], "autorange": False},
+            "zaxis": {"range": [-base_z_lim, base_z_lim], "autorange": False},
         }
 
     if zoom_target == "tracker":
@@ -887,6 +894,26 @@ def main() -> None:
     max_points = st.sidebar.number_input("Max points / collection", value=10000, min_value=100, step=100)
     point_size = st.sidebar.number_input("Base point size", value=3.0, min_value=1.0, max_value=20.0, step=0.5)
     show_tracks = st.sidebar.checkbox("Show track/MC lines", value=True)
+    if show_tracks:
+        max_lines = st.sidebar.number_input(
+            "Max lines / collection",
+            min_value=100,
+            max_value=20000,
+            value=4000,
+            step=100,
+        )
+        min_line_energy = st.sidebar.number_input("Min line energy [GeV]", value=0.0, step=0.01)
+        track_length = st.sidebar.number_input(
+            "Track segment length [mm]",
+            min_value=50.0,
+            max_value=5000.0,
+            value=1200.0,
+            step=50.0,
+        )
+    else:
+        max_lines = 0
+        min_line_energy = 0.0
+        track_length = 1200.0
     show_detector = st.sidebar.checkbox("Show detector wireframe", value=True)
     if "plot_reset_nonce" not in st.session_state:
         st.session_state.plot_reset_nonce = 0
@@ -974,25 +1001,7 @@ def main() -> None:
                     help="Only these PFO types are shown as lines.",
                 )
                 pfo_allowed_pdgs = set(int(v) for v in selected_pdgs)
-        max_lines = st.sidebar.number_input(
-            "Max lines / collection",
-            min_value=100,
-            max_value=20000,
-            value=4000,
-            step=100,
-        )
-        min_line_energy = st.sidebar.number_input("Min line energy [GeV]", value=0.0, step=0.01)
-        track_length = st.sidebar.number_input(
-            "Track segment length [mm]",
-            min_value=50.0,
-            max_value=5000.0,
-            value=1200.0,
-            step=50.0,
-        )
-    else:
-        max_lines = 0
-        min_line_energy = 0.0
-        track_length = 1200.0
+    
 
     with st.sidebar.expander("Collection debug", expanded=False):
         st.caption(f"All collections in event: {len(all_event_collections)}")
