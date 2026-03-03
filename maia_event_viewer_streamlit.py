@@ -786,19 +786,13 @@ def build_figure(
     if show_detector:
         add_detector_wireframe(fig)
 
-    base_r_lim = DETECTOR_R_MAX_MM + LINE_MARGIN_MM
-    base_z_lim = DETECTOR_Z_MAX_MM + LINE_MARGIN_MM
     scene_layout: dict[str, Any] = {
             "xaxis_title": "x [mm]",
             "yaxis_title": "y [mm]",
             "zaxis_title": "z [mm]",
             "aspectmode": "data",
-            "uirevision": f"maia-scene-{view_revision}",
-            # Keep a stable default framing so collection/threshold changes do
-            # not trigger autoscale jumps that feel like camera resets.
-            "xaxis": {"range": [-base_r_lim, base_r_lim], "autorange": False},
-            "yaxis": {"range": [-base_r_lim, base_r_lim], "autorange": False},
-            "zaxis": {"range": [-base_z_lim, base_z_lim], "autorange": False},
+            # Keep uirevision stable so normal widget changes preserve user view.
+            "uirevision": "maia-scene",
         }
 
     if zoom_target == "tracker":
@@ -823,7 +817,7 @@ def build_figure(
         }
 
     fig.update_layout(
-        uirevision=f"maia-view-{view_revision}",
+        uirevision="maia-view",
         scene=scene_layout,
         margin={"l": 0, "r": 0, "t": 30, "b": 0},
         legend={"orientation": "h", "yanchor": "bottom", "y": 1.02, "x": 0},
