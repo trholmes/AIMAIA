@@ -618,7 +618,6 @@ def build_figure(
     pfo_allowed_pdgs: set[int] | None,
     show_detector: bool,
     view_revision: int,
-    apply_default_camera: bool,
     zoom_target: str | None,
 ) -> tuple[go.Figure, list[CollectionSummary]]:
     fig = go.Figure()
@@ -769,12 +768,12 @@ def build_figure(
         scene_layout["yaxis"] = {"range": [-r_lim, r_lim]}
         scene_layout["zaxis"] = {"range": [-z_lim, z_lim]}
 
-    if apply_default_camera:
-        # Initial view: z-axis runs left-right on screen.
-        scene_layout["camera"] = {
-            "eye": {"x": 2.2, "y": 0.0, "z": 0.0},
-            "up": {"x": 0.0, "y": 1.0, "z": 0.0},
-        }
+    # Enforce a stable default orientation on every rerun so the z-axis
+    # consistently appears left-right instead of reverting to Plotly's default.
+    scene_layout["camera"] = {
+        "eye": {"x": 2.2, "y": 0.0, "z": 0.0},
+        "up": {"x": 0.0, "y": 1.0, "z": 0.0},
+    }
 
     fig.update_layout(
         uirevision=f"maia-view-{view_revision}",
@@ -853,30 +852,24 @@ def main() -> None:
         st.session_state.plot_reset_nonce = 0
     if "view_revision" not in st.session_state:
         st.session_state.view_revision = 0
-    if "apply_default_camera" not in st.session_state:
-        st.session_state.apply_default_camera = True
     if "initial_view_bootstrap_done" not in st.session_state:
         # Force a fresh first render with the default camera orientation.
         st.session_state.plot_reset_nonce += 1
         st.session_state.view_revision += 1
-        st.session_state.apply_default_camera = True
         st.session_state.initial_view_bootstrap_done = True
     if "zoom_target" not in st.session_state:
         st.session_state.zoom_target = None
     if st.sidebar.button("Reset 3D view"):
         st.session_state.plot_reset_nonce += 1
         st.session_state.view_revision += 1
-        st.session_state.apply_default_camera = True
         st.session_state.zoom_target = None
     if st.sidebar.button("Zoom to calorimeter"):
         st.session_state.plot_reset_nonce += 1
         st.session_state.view_revision += 1
-        st.session_state.apply_default_camera = True
         st.session_state.zoom_target = "calorimeter"
     if st.sidebar.button("Zoom to tracker"):
         st.session_state.plot_reset_nonce += 1
         st.session_state.view_revision += 1
-        st.session_state.apply_default_camera = True
         st.session_state.zoom_target = "tracker"
 
     try:
@@ -978,7 +971,6 @@ def main() -> None:
         pfo_allowed_pdgs=pfo_allowed_pdgs,
         show_detector=show_detector,
         view_revision=int(st.session_state.view_revision),
-        apply_default_camera=bool(st.session_state.apply_default_camera),
         zoom_target=st.session_state.zoom_target,
     )
 
@@ -987,7 +979,6 @@ def main() -> None:
         use_container_width=True,
         key=f"maia_plot_{st.session_state.plot_reset_nonce}",
     )
-    st.session_state.apply_default_camera = False
 
     st.subheader("Collection Summary")
     st.dataframe(
