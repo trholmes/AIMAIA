@@ -554,6 +554,7 @@ def clip_line_to_detector_bounds(
 
 
 def add_detector_wireframe(fig: go.Figure) -> None:
+    wireframe_group_title_shown = False
     for comp in DETECTOR_COMPONENTS:
         name = comp["name"]
         color = comp["color"]
@@ -573,12 +574,16 @@ def add_detector_wireframe(fig: go.Figure) -> None:
                             line={"color": color, "width": 2},
                             opacity=0.35,
                             name=name,
-                            legendgroup=name,
+                            legendgroup="detector-wireframe",
+                            legendgrouptitle_text=(
+                                "Detector wireframe" if not wireframe_group_title_shown else None
+                            ),
                             showlegend=show_legend_for_component,
                             hoverinfo="skip",
                         )
                     )
                     show_legend_for_component = False
+                    wireframe_group_title_shown = True
 
             for phi in (0.0, math.pi / 2.0, math.pi, 3.0 * math.pi / 2.0):
                 for r in (barrel["rmin"], barrel["rmax"]):
@@ -592,7 +597,7 @@ def add_detector_wireframe(fig: go.Figure) -> None:
                             mode="lines",
                             line={"color": color, "width": 1},
                             opacity=0.25,
-                            legendgroup=name,
+                            legendgroup="detector-wireframe",
                             showlegend=False,
                             hoverinfo="skip",
                         )
@@ -611,7 +616,7 @@ def add_detector_wireframe(fig: go.Figure) -> None:
                             mode="lines",
                             line={"color": color, "width": 1},
                             opacity=0.22,
-                            legendgroup=name,
+                            legendgroup="detector-wireframe",
                             showlegend=False,
                             hoverinfo="skip",
                         )
@@ -631,7 +636,7 @@ def add_detector_wireframe(fig: go.Figure) -> None:
                             mode="lines",
                             line={"color": color, "width": 1},
                             opacity=0.2,
-                            legendgroup=name,
+                            legendgroup="detector-wireframe",
                             showlegend=False,
                             hoverinfo="skip",
                         )
@@ -657,6 +662,7 @@ def build_figure(
 ) -> tuple[go.Figure, list[CollectionSummary]]:
     fig = go.Figure()
     summaries: list[CollectionSummary] = []
+    event_group_title_shown = False
 
     for idx, coll_name in enumerate(selected_collections):
         try:
@@ -704,9 +710,14 @@ def build_figure(
                         "opacity": HIT_MARKER_OPACITY,
                         "line": {"width": 0},
                     },
+                    legendgroup="event-data",
+                    legendgrouptitle_text=(
+                        "Event collections" if not event_group_title_shown else None
+                    ),
                     name=coll_name,
                 )
             )
+            event_group_title_shown = True
 
         summaries.append(
             CollectionSummary(
@@ -765,11 +776,18 @@ def build_figure(
                             line={"color": color, "width": 2},
                             opacity=0.45,
                             name=f"{coll_name} (lines)",
-                            legendgroup=f"{coll_name}_lines",
+                            legendgroup="event-data",
+                            legendgrouptitle_text=(
+                                "Event collections"
+                                if (show_leg and not event_group_title_shown)
+                                else None
+                            ),
                             showlegend=show_leg,
                             hoverinfo="skip",
                         )
                     )
+                    if show_leg:
+                        event_group_title_shown = True
                     show_leg = False
                     n_lines += 1
                     if obj_energy is not None:
@@ -819,7 +837,14 @@ def build_figure(
         uirevision="maia-view",
         scene=scene_layout,
         margin={"l": 0, "r": 0, "t": 30, "b": 0},
-        legend={"orientation": "h", "yanchor": "bottom", "y": 1.02, "x": 0},
+        legend={
+            "orientation": "h",
+            "yanchor": "bottom",
+            "y": 1.02,
+            "x": 0,
+            "tracegroupgap": 16,
+            "groupclick": "toggleitem",
+        },
     )
 
     return fig, summaries
