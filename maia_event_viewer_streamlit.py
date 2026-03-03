@@ -271,7 +271,7 @@ def extract_track_lines(
 ) -> list[tuple[tuple[float, float, float], tuple[float, float, float]]]:
     lines: list[tuple[tuple[float, float, float], tuple[float, float, float]]] = []
 
-    # MCParticle-like API.
+    # MCParticle-like API with explicit endpoint when available.
     start = try_call(obj, "getVertex")
     end = try_call(obj, "getEndpoint")
     if start is not None and end is not None:
@@ -281,6 +281,24 @@ def extract_track_lines(
             lines.append((p0, p1))
         except Exception:
             pass
+    else:
+        # Fallback for MCParticles that expose vertex + momentum but not endpoint.
+        momentum = try_call(obj, "getMomentum")
+        if start is not None and momentum is not None:
+            try:
+                x0, y0, z0 = float(start[0]), float(start[1]), float(start[2])
+                px, py, pz = float(momentum[0]), float(momentum[1]), float(momentum[2])
+                norm = math.sqrt(px * px + py * py + pz * pz)
+                if norm > 0:
+                    scale = track_length_mm / norm
+                    lines.append(
+                        (
+                            (x0, y0, z0),
+                            (x0 + px * scale, y0 + py * scale, z0 + pz * scale),
+                        )
+                    )
+            except Exception:
+                pass
 
     # Track-like API: draw a segment from reference point in momentum direction.
     states = try_call(obj, "getTrackStates")
@@ -647,6 +665,7 @@ def add_detector_wireframe(fig: go.Figure) -> None:
 def build_figure(
     event: Any,
     selected_collections: list[str],
+    summary_collections: list[str],
     selected_line_collections: list[str],
     min_hit_energy: float,
     min_line_energy: float,
@@ -664,39 +683,54 @@ def build_figure(
     fig = go.Figure()
     summaries: list[CollectionSummary] = []
     event_group_title_shown = False
+    selected_color_index = {name: idx for idx, name in enumerate(selected_collections)}
 
-    for idx, coll_name in enumerate(selected_collections):
+    for coll_name in summary_collections:
         try:
             coll = event.getCollection(coll_name)
         except Exception:
             continue
 
-        points: list[tuple[float, float, float]] = []
-        energies: list[float] = []
+        render_points: list[tuple[float, float, float]] = []
+        render_energies: list[float] = []
+        summary_count = 0
+        summary_energy = 0.0
         for obj in coll:
             pos = extract_position(obj)
-            if pos is not None:
-                energy = extract_energy(obj)
-                if energy >= min_hit_energy:
-                    points.append(pos)
-                    energies.append(energy)
+            if pos is None:
+                continue
 
-        if len(points) > max_points_per_collection:
-            stride = max(1, len(points) // max_points_per_collection)
-            points = points[::stride]
-            energies = energies[::stride]
+            # Apply threshold only when energy exists; do not drop objects like
+            # MCParticles when bindings omit energy accessors.
+            energy_opt = extract_energy_optional(obj)
+            if energy_opt is not None and energy_opt < min_hit_energy:
+                continue
 
-        color = HIT_COLOR_PALETTE[idx % len(HIT_COLOR_PALETTE)]
+            summary_count += 1
+            if energy_opt is not None:
+                summary_energy += energy_opt
 
-        if points:
-            xs = [p[0] for p in points]
-            ys = [p[1] for p in points]
-            zs = [p[2] for p in points]
+            if coll_name in selected_color_index:
+                render_points.append(pos)
+                render_energies.append(energy_opt if energy_opt is not None else 0.0)
+
+        if len(render_points) > max_points_per_collection:
+            stride = max(1, len(render_points) // max_points_per_collection)
+            render_points = render_points[::stride]
+            render_energies = render_energies[::stride]
+
+        color_idx = selected_color_index.get(coll_name)
+        color = HIT_COLOR_PALETTE[color_idx % len(HIT_COLOR_PALETTE)] if color_idx is not None else None
+
+        if render_points and color is not None:
+            xs = [p[0] for p in render_points]
+            ys = [p[1] for p in render_points]
+            zs = [p[2] for p in render_points]
             # Softer energy scaling avoids oversized dense clusters that visually wash out.
             sizes = [
                 point_size
                 + min(HIT_MARKER_MAX_ENERGY_BOOST, math.sqrt(max(0.0, e)) * 1.1)
-                for e in energies
+                for e in render_energies
             ]
 
             fig.add_trace(
@@ -723,9 +757,9 @@ def build_figure(
         summaries.append(
             CollectionSummary(
                 name=coll_name,
-                n_points=len(points),
+                n_points=summary_count,
                 n_tracks=0,
-                energy_sum=sum(energies),
+                energy_sum=summary_energy,
             )
         )
 
@@ -1047,6 +1081,7 @@ def main() -> None:
     fig, summaries = build_figure(
         event=event,
         selected_collections=selected,
+        summary_collections=event_collections,
         selected_line_collections=line_selected,
         min_hit_energy=float(min_hit_energy),
         min_line_energy=float(min_line_energy),
