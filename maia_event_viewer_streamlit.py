@@ -889,6 +889,10 @@ def main() -> None:
     point_size = st.sidebar.number_input("Base point size", value=3.0, min_value=1.0, max_value=20.0, step=0.5)
     show_tracks = st.sidebar.checkbox("Show track/MC lines", value=True)
     if show_tracks:
+        if "min_line_energy_applied" not in st.session_state:
+            st.session_state.min_line_energy_applied = 0.0
+        if "min_line_energy_input" not in st.session_state:
+            st.session_state.min_line_energy_input = float(st.session_state.min_line_energy_applied)
         max_lines = st.sidebar.number_input(
             "Max lines / collection",
             min_value=100,
@@ -896,7 +900,16 @@ def main() -> None:
             value=4000,
             step=100,
         )
-        min_line_energy = st.sidebar.number_input("Min line energy [GeV]", value=0.0, step=0.01)
+        st.sidebar.number_input(
+            "Min line energy [GeV]",
+            min_value=0.0,
+            step=0.01,
+            key="min_line_energy_input",
+        )
+        if st.sidebar.button("Apply min line energy"):
+            st.session_state.min_line_energy_applied = float(st.session_state.min_line_energy_input)
+        min_line_energy = float(st.session_state.min_line_energy_applied)
+        st.sidebar.caption(f"Applied min line energy: {min_line_energy:.2f} GeV")
         track_length = st.sidebar.number_input(
             "Track segment length [mm]",
             min_value=50.0,
