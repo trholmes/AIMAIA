@@ -900,23 +900,23 @@ def main() -> None:
         st.session_state.view_revision += 1
         st.session_state.force_default_camera = True
         st.session_state.initial_view_bootstrap_done = True
-    if "zoom_target" not in st.session_state:
-        st.session_state.zoom_target = None
+    if "pending_zoom_target" not in st.session_state:
+        st.session_state.pending_zoom_target = None
     if st.sidebar.button("Reset 3D view"):
         st.session_state.plot_reset_nonce += 1
         st.session_state.view_revision += 1
         st.session_state.force_default_camera = True
-        st.session_state.zoom_target = None
+        st.session_state.pending_zoom_target = None
     if st.sidebar.button("Zoom to calorimeter"):
         st.session_state.plot_reset_nonce += 1
         st.session_state.view_revision += 1
         st.session_state.force_default_camera = True
-        st.session_state.zoom_target = "calorimeter"
+        st.session_state.pending_zoom_target = "calorimeter"
     if st.sidebar.button("Zoom to tracker"):
         st.session_state.plot_reset_nonce += 1
         st.session_state.view_revision += 1
         st.session_state.force_default_camera = True
-        st.session_state.zoom_target = "tracker"
+        st.session_state.pending_zoom_target = "tracker"
 
     try:
         event, reader = get_event(path, event_index)
@@ -1020,7 +1020,7 @@ def main() -> None:
         show_detector=show_detector,
         view_revision=int(st.session_state.view_revision),
         force_default_camera=bool(st.session_state.force_default_camera),
-        zoom_target=st.session_state.zoom_target,
+        zoom_target=st.session_state.pending_zoom_target,
     )
 
     st.plotly_chart(
@@ -1029,6 +1029,7 @@ def main() -> None:
         key=f"maia_plot_{st.session_state.plot_reset_nonce}",
     )
     st.session_state.force_default_camera = False
+    st.session_state.pending_zoom_target = None
 
     st.subheader("Collection Summary")
     st.dataframe(
