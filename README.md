@@ -15,25 +15,30 @@ Check out this repository and cd into it.
 
 run the conainer:
 ```bash
-apptainer run -B /ospool/uc-shared/project/futurecolliders/data/:/data -B /scratch/$USER:/user /cvmfs/unpacked.cern.ch/ghcr.io/muoncollidersoft/mucoll-sim-ubuntu24\:v2.9.7/```
+apptainer run -B /ospool/uc-shared/project/futurecolliders/data/:/data -B /scratch/$USER:/user /cvmfs/unpacked.cern.ch/ghcr.io/muoncollidersoft/mucoll-sim-ubuntu24\:v2.9.7/
+```
 
 setup:
 ```bash
-setup_mucoll```
+setup_mucoll
+```
 
 add dependencies in a way allowed by this container
 ```bash
 python3 -m venv ~/venvs/maia
 source ~/venvs/maia/bin/activate
-python -m pip install streamlit plotly```
+python -m pip install streamlit plotly
+```
 
 run the script
 ```bash
-python3 -m streamlit run maia_event_viewer_streamlit.py --server.address 127.0.0.1 --server.port 8501```
+python3 -m streamlit run maia_event_viewer_streamlit.py --server.address 127.0.0.1 --server.port 8501
+```
 
 finally, on your local computer, run
 ```bash
-ssh -N -L 8501:127.0.0.1:8501 <username>@ap23.uc.osg-htc.org```
+ssh -N -L 8501:127.0.0.1:8501 <username>@ap23.uc.osg-htc.org
+```
 
 and navigate in your browser to http://localhost:8501. If 8501 is taken, choose another port on the last two commands and navigate to that. 
 
