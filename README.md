@@ -7,6 +7,32 @@ This repo contains two viewers for LCIO (`.slcio`) MAIA events:
 
 Both rely on `pylcio` for reading LCIO files.
 
+## Full instructions to run from start on OSG
+
+First, ssh into osg with your info and move to the directory you want.
+
+Check out this repository and cd into it.
+
+run the conainer:
+`apptainer run -B /ospool/uc-shared/project/futurecolliders/data/:/data -B /scratch/$USER:/user /cvmfs/unpacked.cern.ch/ghcr.io/muoncollidersoft/mucoll-sim-ubuntu24\:v2.9.7/`
+
+setup:
+`setup_mucoll`
+
+add dependencies in a way allowed by this container
+```python3 -m venv ~/venvs/maia
+source ~/venvs/maia/bin/activate
+python -m pip install streamlit plotly```
+
+run the script
+`python3 -m streamlit run maia_event_viewer_streamlit.py --server.address 127.0.0.1 --server.port 8501`
+
+finally, on your local computer, run
+`ssh -N -L 8501:127.0.0.1:8501 <username>@ap23.uc.osg-htc.org`
+
+and navigate in your browser to http://localhost:8501. If 8501 is taken, choose another port on the last two commands and navigate to that. 
+
+
 ## Run Again (Quick Routine)
 
 ### Remote server (inside Apptainer)
