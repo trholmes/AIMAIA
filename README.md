@@ -14,6 +14,7 @@ Both rely on `pylcio` for reading LCIO files.
 ```bash
 cd /scratch/trholmes/mucol/mucolstudies/AIMAIA
 apptainer shell <your-image>.sif
+python3 -m pip install --user streamlit plotly
 export PYUSER_SITE="$(python3 -m site --user-site)"
 export PYTHONPATH="$PYUSER_SITE:$PYTHONPATH"
 python3 -m streamlit run maia_event_viewer_streamlit.py --server.address 127.0.0.1 --server.port 8501
