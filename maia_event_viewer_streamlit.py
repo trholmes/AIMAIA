@@ -395,7 +395,9 @@ def default_point_collections(collection_names: list[str]) -> list[str]:
     secondary: list[str] = []
     for name in collection_names:
         lower = name.lower()
-        if "tracker" in lower and "collection" in lower:
+        if ("tracker" in lower and "collection" in lower) or (
+            "vertex" in lower and "collection" in lower
+        ):
             # Keep available in UI/summary, but don't draw by default.
             continue
         if "ecal" in lower or "hcal" in lower or "cal" in lower:
@@ -407,7 +409,14 @@ def default_point_collections(collection_names: list[str]) -> list[str]:
     merged = list(dict.fromkeys(preferred + secondary))
     if merged:
         return merged[:12]
-    fallback = [n for n in collection_names if not ("tracker" in n.lower() and "collection" in n.lower())]
+    fallback = [
+        n
+        for n in collection_names
+        if not (
+            ("tracker" in n.lower() and "collection" in n.lower())
+            or ("vertex" in n.lower() and "collection" in n.lower())
+        )
+    ]
     return fallback[: min(8, len(fallback))]
 
 
